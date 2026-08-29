@@ -1,5 +1,6 @@
 package com.limiao.notes.data
 
+import androidx.compose.ui.graphics.Color
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -113,11 +114,11 @@ object Moods {
     val ALL = listOf("😊开心", "😐一般", "😔低落", "😤烦躁", "🤒不舒服")
 }
 
-/** 分类配色（文字色 / 底色），返回 Android Color 值 */
+/** 分类配色（文字色 / 底色） */
 object CategoryColors {
-    data class C(val text: Int, val bg: Int)
+    data class C(val text: Color, val bg: Color)
 
-    private fun parse(hex: String) = android.graphics.Color.parseColor(hex)
+    private fun parse(hex: String) = Color(android.graphics.Color.parseColor(hex))
 
     private val MAP = mapOf(
         "餐饮" to C(parse("#9A3412"), parse("#FFEDD5")),       // 橙

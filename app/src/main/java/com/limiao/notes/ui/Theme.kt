@@ -33,7 +33,5 @@ private val LightColors = lightColorScheme(
 @Composable
 fun LiMiaoTheme(content: @Composable () -> Unit) {
     // 本应用固定浅色主题（与产品设计一致）
-    @Suppress("UNUSED_EXPRESSION")
-    val _ = isSystemInDarkTheme()
     MaterialTheme(colorScheme = LightColors, content = content)
 }

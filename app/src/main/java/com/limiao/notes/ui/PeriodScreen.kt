@@ -231,7 +231,7 @@ fun PeriodScreen(data: AppData, onSave: (AppData) -> Unit) {
         val dayNote = data.dayNotes.find { it.date == date }
         val inPeriod = data.periods.find { date >= it.startDate && (it.endDate == null || date <= it.endDate) }
         var flow by remember { mutableStateOf(dayNote?.flow ?: "") }
-        var symptoms by remember { mutableStateOf(dayNote?.symptoms?.toMutableList() ?: mutableListOf()) }
+        var symptoms by remember { mutableStateOf<List<String>>(dayNote?.symptoms ?: emptyList()) }
         var noteText by remember { mutableStateOf(dayNote?.note ?: "") }
 
         ModalBottomSheet(
@@ -270,7 +270,7 @@ fun PeriodScreen(data: AppData, onSave: (AppData) -> Unit) {
                         Text(
                             s,
                             modifier = Modifier
-                                .clickable { if (on) symptoms.remove(s) else symptoms.add(s) }
+                                .clickable { symptoms = if (on) symptoms - s else symptoms + s }
                                 .background(if (on) Primary else Bg, RoundedCornerShape(50))
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                             color = if (on) Color.White else InkSoft, fontSize = 12.sp,
@@ -292,7 +292,7 @@ fun PeriodScreen(data: AppData, onSave: (AppData) -> Unit) {
                 // 保存按天记录
                 Button(
                     onClick = {
-                        val dn = DayNote(date, flow.ifBlank { null }, symptoms.toList(), noteText.trim(), date)
+                        val dn = DayNote(date, flow.ifBlank { null }, symptoms, noteText.trim(), date)
                         val next = data.copy(
                             dayNotes = data.dayNotes.filter { it.date != date } + dn
                         )

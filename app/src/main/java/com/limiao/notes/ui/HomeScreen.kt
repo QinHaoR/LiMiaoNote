@@ -6,6 +6,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,15 +19,23 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.limiao.notes.data.AppData
 import com.limiao.notes.data.Categories
+import com.limiao.notes.data.CategoryColors
 import com.limiao.notes.data.DayPeriods
 import com.limiao.notes.data.DateFmt
 import com.limiao.notes.data.IdGen
@@ -50,9 +61,9 @@ import com.limiao.notes.data.Transaction
 
 private fun String.shortDisplay(): String = substring(8, 10).toInt().toString()
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun HomeScreen(data: AppData, onSave: (AppData) -> Unit) {
+fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Unit, onOpenMonthDetail: (String) -> Unit) {
     var filter by remember { mutableStateOf("all") }
     var month by remember { mutableStateOf(currentYm()) }
 
@@ -63,9 +74,11 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit) {
     var note by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(DateFmt.today()) }
     var time by remember { mutableStateOf<String?>(null) }
+    var showDatePicker by remember { mutableStateOf(false) }
     var editId by remember { mutableStateOf<String?>(null) }
     var editAmount by remember { mutableStateOf("") }
     var editNote by remember { mutableStateOf("") }
+    var actionFor by remember { mutableStateOf<String?>(null) }
 
     val monthTxns = data.transactions.filter { it.date.startsWith(month) }
     val shown = monthTxns.filter { filter == "all" || it.type == filter }
@@ -134,8 +147,13 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit) {
 
         Spacer(Modifier.height(12.dp))
 
-        // 汇总卡片
-        Card(colors = CardDefaults.cardColors(containerColor = Surface)) {
+        // 汇总卡片（点击进月份总览）
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Surface),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onOpenMonths() },
+        ) {
             Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                 SumCell("支出", expense, Primary)
                 SumCell("收入", income, IncomeGreen)
@@ -170,22 +188,27 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit) {
                 }
                 Spacer(Modifier.height(12.dp))
 
-                // 金额
+                // 金额（大字号，方便输入）
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { amount = it.filter { ch -> ch.isDigit() || ch == '.' } },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("金额") },
-                    prefix = { Text("¥") },
+                    placeholder = { Text("0.00") },
+                    prefix = { Text("¥", fontSize = 22.sp) },
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                 )
                 Spacer(Modifier.height(10.dp))
 
-                // 分类 chips
+                // 分类 chips（多排自动换行）
                 val cats = if (txnType == "expense") Categories.EXPENSE else Categories.INCOME
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     cats.forEach { c ->
                         val colors = CategoryColors.of(c)
                         Text(
@@ -212,8 +235,12 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit) {
                 )
                 Spacer(Modifier.height(8.dp))
 
-                // 快捷备注
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // 快捷备注（多排自动换行）
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     QuickNotes.ALL.forEach { q ->
                         Text(
                             q,
@@ -227,36 +254,45 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit) {
                 }
                 Spacer(Modifier.height(10.dp))
 
-                // 日期 + 时间 + 时段
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // 日期 + 时间（一行，居中，日期放大）
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
                     Text(
                         date,
                         modifier = Modifier
-                            .clickable { onSave(data) /* 占位，日期选择后续补 */ }
+                            .clickable { showDatePicker = true }
                             .background(Bg, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        color = InkSoft, fontSize = 13.sp,
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        color = InkSoft, fontSize = 17.sp, fontWeight = FontWeight.Medium,
                     )
+                    Spacer(Modifier.width(8.dp))
                     Text(
                         time ?: "选时间",
                         modifier = Modifier
                             .clickable { time = DateFmt.nowTime() }
                             .background(Bg, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        color = if (time == null) Muted else InkSoft, fontSize = 13.sp,
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        color = if (time == null) Muted else InkSoft, fontSize = 14.sp,
                     )
-                    Spacer(Modifier.weight(1f))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        DayPeriods.ALL.forEach { (label, t) ->
-                            Text(
-                                label,
-                                modifier = Modifier
-                                    .clickable { time = t }
-                                    .background(Bg, RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                color = InkSoft, fontSize = 11.sp,
-                            )
-                        }
+                }
+                Spacer(Modifier.height(8.dp))
+                // 时段快捷（下一行，居中）
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    DayPeriods.ALL.forEach { (label, t) ->
+                        Text(
+                            label,
+                            modifier = Modifier
+                                .clickable { time = t }
+                                .background(Bg, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                            color = InkSoft, fontSize = 12.sp,
+                        )
                     }
                 }
                 Spacer(Modifier.height(14.dp))
@@ -272,11 +308,13 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit) {
 
         Spacer(Modifier.height(16.dp))
 
-        // 流水列表
+        // 流水列表（默认收起，只显示最近 3 天，可展开全部）
+        val allGroups = groups.entries.toList()
+        val showGroups = allGroups.take(3)
         if (groups.isEmpty()) {
             Text("这个月还没有记录", color = Muted, modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), textAlign = TextAlign.Center)
         } else {
-            groups.forEach { (day, items) ->
+            showGroups.forEach { (day, items) ->
                 Card(colors = CardDefaults.cardColors(containerColor = Surface)) {
                     Row(
                         Modifier.fillMaxWidth().background(Bg).padding(horizontal = 14.dp, vertical = 8.dp),
@@ -311,7 +349,10 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit) {
                             }
                         } else {
                             Row(
-                                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { actionFor = t.id }
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 val colors = CategoryColors.of(t.category)
@@ -334,21 +375,102 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit) {
                                     color = if (t.type == "income") IncomeGreen else Ink,
                                     fontWeight = FontWeight.Medium, fontSize = 14.sp,
                                 )
-                                TextButton(onClick = {
-                                    editId = t.id; editAmount = t.amount.toString(); editNote = t.note
-                                }) { Text("编辑", color = Muted, fontSize = 12.sp) }
-                                TextButton(onClick = {
-                                    onSave(data.copy(transactions = data.transactions.filter { it.id != t.id }))
-                                }) { Text("✕", color = Muted, fontSize = 14.sp) }
                             }
                         }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
             }
+            // 查看全部 → 直接跳当前月明细页
+            if (groups.size > 3) {
+                TextButton(
+                    onClick = { onOpenMonthDetail(month) },
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                ) { Text("查看全部 ${groups.size} 天 ›", color = Muted) }
+            }
         }
         Spacer(Modifier.height(24.dp))
     }
+
+    // 日期选择对话框
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = dateToMillis(date))
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { date = millisToDate(it) }
+                    showDatePicker = false
+                }) { Text("确定") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showDatePicker = false }) { Text("取消") }
+            },
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    // 记录操作弹层（点击列表项弹出：编辑 / 删除）
+    actionFor?.let { id ->
+        val t = data.transactions.find { it.id == id }
+        ModalBottomSheet(
+            onDismissRequest = { actionFor = null },
+            sheetState = rememberModalBottomSheetState(),
+        ) {
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                Text(
+                    "${t?.category ?: ""}  ${t?.note?.ifBlank { "" } ?: ""}    ${if (t?.type == "income") "+" else "-"}¥${fmtMoney(t?.amount ?: 0.0)}",
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 15.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider()
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            if (t != null) { editId = t.id; editAmount = t.amount.toString(); editNote = t.note }
+                            actionFor = null
+                        }
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.Edit, null, tint = InkSoft, modifier = Modifier.padding(end = 12.dp))
+                    Text("编辑这条记录", color = Ink)
+                }
+                HorizontalDivider()
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            if (t != null) {
+                                onSave(data.copy(transactions = data.transactions.filter { it.id != t.id }))
+                            }
+                            actionFor = null
+                        }
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("删除这条记录", color = androidx.compose.ui.graphics.Color(0xFFDC2626))
+                }
+                Spacer(Modifier.height(20.dp))
+            }
+        }
+    }
+}
+
+private fun dateToMillis(date: String): Long {
+    val p = date.split("-").map { it.toInt() }
+    val c = java.util.Calendar.getInstance()
+    c.set(p[0], p[1] - 1, p[2], 0, 0, 0)
+    return c.timeInMillis
+}
+
+private fun millisToDate(millis: Long): String {
+    val c = java.util.Calendar.getInstance().apply { timeInMillis = millis }
+    val p = { n: Int -> n.toString().padStart(2, '0') }
+    return "${c.get(java.util.Calendar.YEAR)}-${p(c.get(java.util.Calendar.MONTH) + 1)}-${p(c.get(java.util.Calendar.DAY_OF_MONTH))}"
 }
 
 @Composable

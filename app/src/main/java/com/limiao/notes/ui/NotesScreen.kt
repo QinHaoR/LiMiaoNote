@@ -3,6 +3,7 @@ package com.limiao.notes.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -129,7 +130,10 @@ fun NotesScreen(data: AppData, onSave: (AppData) -> Unit) {
             sheetState = rememberModalBottomSheetState(),
         ) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-                Text(target == null ? "新建笔记" : "编辑笔记", fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (target == null) "新建笔记" else "编辑笔记",
+                    fontWeight = FontWeight.SemiBold,
+                )
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = content,
