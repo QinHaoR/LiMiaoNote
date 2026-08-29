@@ -1,0 +1,16 @@
+# Android / Gradle
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Kotlin
+.kotlin/
+
+# 系统
+.DS_Store
+Thumbs.db

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 无 ActionBar 浅色主题，状态栏浅粉（Compose 内用 MaterialTheme 配色） -->
+    <style name="Theme.LiMiao" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#FDF5F6</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+    </style>
+</resources>
