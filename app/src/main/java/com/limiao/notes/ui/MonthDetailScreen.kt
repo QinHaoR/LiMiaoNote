@@ -22,6 +22,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +47,7 @@ import com.limiao.notes.data.AppData
 import com.limiao.notes.data.CategoryColors
 
 /** 某月明细：汇总 + 支出结构 + 按天流水（点击项弹出编辑/删除） */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MonthDetailScreen(ym: String, data: AppData, onBack: () -> Unit, onSave: (AppData) -> Unit) {
     val txns = data.transactions.filter { it.date.startsWith(ym) }
@@ -60,7 +62,6 @@ fun MonthDetailScreen(ym: String, data: AppData, onBack: () -> Unit, onSave: (Ap
     var editId by remember { mutableStateOf<String?>(null) }
     var editAmount by remember { mutableStateOf("") }
     var editNote by remember { mutableStateOf("") }
-    var actionFor by remember { mutableStateOf<String?>(null) }
 
     Column(
         Modifier
@@ -212,11 +213,14 @@ fun MonthDetailScreen(ym: String, data: AppData, onBack: () -> Unit, onSave: (Ap
                                 }
                             }
                         } else {
+                            SwipeRevealItem(
+                                onEdit = { editId = t.id; editAmount = t.amount.toString(); editNote = t.note },
+                                onDelete = {
+                                    onSave(data.copy(transactions = data.transactions.filter { it.id != t.id }))
+                                },
+                            ) {
                             Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable { actionFor = t.id }
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 val colors = CategoryColors.of(t.category)
@@ -240,6 +244,7 @@ fun MonthDetailScreen(ym: String, data: AppData, onBack: () -> Unit, onSave: (Ap
                                     fontWeight = FontWeight.Medium, fontSize = 14.sp,
                                 )
                             }
+                            }
                         }
                     }
                 }
@@ -249,53 +254,7 @@ fun MonthDetailScreen(ym: String, data: AppData, onBack: () -> Unit, onSave: (Ap
         Spacer(Modifier.height(24.dp))
     }
 
-    // 操作弹层（编辑 / 删除）
-    actionFor?.let { id ->
-        val t = data.transactions.find { it.id == id }
-        ModalBottomSheet(
-            onDismissRequest = { actionFor = null },
-            sheetState = rememberModalBottomSheetState(),
-        ) {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-                Text(
-                    "${t?.category ?: ""}  ${t?.note?.ifBlank { "" } ?: ""}    ${if (t?.type == "income") "+" else "-"}¥${fmtMoney(t?.amount ?: 0.0)}",
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 15.sp,
-                )
-                Spacer(Modifier.height(8.dp))
-                HorizontalDivider()
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            if (t != null) { editId = t.id; editAmount = t.amount.toString(); editNote = t.note }
-                            actionFor = null
-                        }
-                        .padding(vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Filled.Edit, null, tint = InkSoft, modifier = Modifier.padding(end = 12.dp))
-                    Text("编辑这条记录", color = Ink)
-                }
-                HorizontalDivider()
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            if (t != null) {
-                                onSave(data.copy(transactions = data.transactions.filter { it.id != t.id }))
-                            }
-                            actionFor = null
-                        }
-                        .padding(vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("删除这条记录", color = androidx.compose.ui.graphics.Color(0xFFDC2626))
-                }
-                Spacer(Modifier.height(20.dp))
-            }
-        }
-    }
+    // （操作改为左滑 SwipeRevealItem，见列表项）
 }
 
 @Composable
