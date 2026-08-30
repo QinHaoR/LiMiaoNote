@@ -2,6 +2,7 @@ package com.limiao.notes.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,10 +32,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -47,6 +52,8 @@ import com.limiao.notes.data.IdGen
 import com.limiao.notes.data.Period
 import com.limiao.notes.data.PeriodSymptoms
 import java.util.Calendar
+import kotlin.math.abs
+import kotlinx.coroutines.launch
 
 // ==================== 经期规则（对应 Web 版 periodOps） ====================
 
@@ -149,6 +156,25 @@ fun PeriodScreen(data: AppData, onSave: (AppData) -> Unit) {
                     Text(monthLabel(ym), modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontWeight = FontWeight.Medium)
                     Text("›", modifier = Modifier.clickable { ym = shiftMonth(ym, 1) }.padding(8.dp), color = Muted, fontSize = 18.sp)
                 }
+                // 滑动切月阈值（50dp），只在下面的日期区域内生效
+                val swipeThreshold = with(LocalDensity.current) { 50.dp.toPx() }
+                Column(
+                    Modifier.pointerInput(ym, swipeThreshold) {
+                        var total = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { total = 0f },
+                            onDragCancel = { total = 0f },
+                            onDragEnd = {
+                                if (abs(total) > swipeThreshold) {
+                                    // 手指左滑(total<0)→看下一月；右滑(total>0)→看上一月
+                                    ym = if (total < 0) shiftMonth(ym, 1) else shiftMonth(ym, -1)
+                                }
+                                total = 0f
+                            },
+                            onHorizontalDrag = { _, dragAmount -> total += dragAmount },
+                        )
+                    },
+                ) {
                 // 星期表头
                 Row(Modifier.fillMaxWidth()) {
                     listOf("日", "一", "二", "三", "四", "五", "六").forEach {
@@ -202,6 +228,7 @@ fun PeriodScreen(data: AppData, onSave: (AppData) -> Unit) {
                         }
                     }
                 }
+                }
             }
         }
 
@@ -234,9 +261,13 @@ fun PeriodScreen(data: AppData, onSave: (AppData) -> Unit) {
         var symptoms by remember { mutableStateOf<List<String>>(dayNote?.symptoms ?: emptyList()) }
         var noteText by remember { mutableStateOf(dayNote?.note ?: "") }
 
+        val sheetState = rememberModalBottomSheetState()
+        val scope = rememberCoroutineScope()
+        val context = LocalContext.current
+
         ModalBottomSheet(
             onDismissRequest = { selected = null },
-            sheetState = rememberModalBottomSheetState(),
+            sheetState = sheetState,
         ) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                 Text(date, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
@@ -289,7 +320,7 @@ fun PeriodScreen(data: AppData, onSave: (AppData) -> Unit) {
                 )
                 Spacer(Modifier.height(14.dp))
 
-                // 保存按天记录
+                // 保存按天记录：保存 → 提示成功 → 关闭面板返回
                 Button(
                     onClick = {
                         val dn = DayNote(date, flow.ifBlank { null }, symptoms, noteText.trim(), date)
@@ -297,6 +328,9 @@ fun PeriodScreen(data: AppData, onSave: (AppData) -> Unit) {
                             dayNotes = data.dayNotes.filter { it.date != date } + dn
                         )
                         onSave(next)
+                        android.widget.Toast.makeText(context, "保存成功", android.widget.Toast.LENGTH_SHORT).show()
+                        // 先播关闭动画，动画结束再置空（直接置空会跳变）
+                        scope.launch { sheetState.hide() }.invokeOnCompletion { selected = null }
                     },
                     modifier = Modifier.fillMaxWidth().height(46.dp),
                     shape = RoundedCornerShape(14.dp),
