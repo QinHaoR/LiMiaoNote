@@ -56,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -659,11 +660,19 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
                         color = Muted, fontSize = 12.sp,
                     )
                     Spacer(Modifier.height(10.dp))
+                    var textFocused by remember { mutableStateOf(false) }
                     OutlinedTextField(
                         value = textInput,
                         onValueChange = { textInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("如：中午吃了碗面花了15块") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { textFocused = it.isFocused },
+                        placeholder = {
+                            // 淡色提示词，聚焦后隐藏（Material3 默认只按是否为空，这里加焦点控制）
+                            if (textInput.isEmpty() && !textFocused) {
+                                Text("如：中午吃了碗面花了15块", color = Muted)
+                            }
+                        },
                         shape = RoundedCornerShape(12.dp),
                         singleLine = true,
                     )
