@@ -314,6 +314,7 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
         if (groups.isEmpty()) {
             Text("这个月还没有记录", color = Muted, modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), textAlign = TextAlign.Center)
         } else {
+            val ctx = androidx.compose.ui.platform.LocalContext.current
             showGroups.forEach { (day, items) ->
                 Card(colors = CardDefaults.cardColors(containerColor = Surface)) {
                     Row(
@@ -321,14 +322,23 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
                             .fillMaxWidth()
                             .background(Bg)
                             // 点日期头 → 进这一天所在月份的明细页
-                            .clickable { onOpenMonthDetail(day.substring(0, 7)) }
+                            .clickable {
+                                android.widget.Toast.makeText(ctx, "正在打开 ${day.substring(0, 7)} 明细…", android.widget.Toast.LENGTH_SHORT).show()
+                                onOpenMonthDetail(day.substring(0, 7))
+                            }
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(day, color = Muted, fontSize = 12.sp)
-                            Text("›", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(start = 3.dp))
+                            Text(
+                                " 查看本月明细 ›",
+                                color = Primary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(start = 6.dp),
+                            )
                         }
                         val de = items.filter { it.type == "expense" }.sumOf { it.amount }
                         val di = items.filter { it.type == "income" }.sumOf { it.amount }
