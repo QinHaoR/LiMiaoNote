@@ -317,10 +317,19 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
             showGroups.forEach { (day, items) ->
                 Card(colors = CardDefaults.cardColors(containerColor = Surface)) {
                     Row(
-                        Modifier.fillMaxWidth().background(Bg).padding(horizontal = 14.dp, vertical = 8.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Bg)
+                            // 点日期头 → 进这一天所在月份的明细页
+                            .clickable { onOpenMonthDetail(day.substring(0, 7)) }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(day, color = Muted, fontSize = 12.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(day, color = Muted, fontSize = 12.sp)
+                            Text("›", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(start = 3.dp))
+                        }
                         val de = items.filter { it.type == "expense" }.sumOf { it.amount }
                         val di = items.filter { it.type == "income" }.sumOf { it.amount }
                         Text(
