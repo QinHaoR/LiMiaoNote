@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 启动画面：浅粉底 + 居中图标（避免启动时黑屏） -->
+<!-- 启动画面：浅粉底 + 居中图标 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/ic_launcher_background" />
     <item
         android:width="88dp"
         android:height="88dp"
-        android:drawable="@drawable/ic_launcher_foreground"
+        android:drawable="@mipmap/ic_launcher"
         android:gravity="center" />
 </layer-list>
