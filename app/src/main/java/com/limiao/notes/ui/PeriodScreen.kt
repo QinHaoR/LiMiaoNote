@@ -1,5 +1,11 @@
 package com.limiao.notes.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -13,6 +19,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -33,15 +40,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.limiao.notes.data.AppData
@@ -52,7 +62,7 @@ import com.limiao.notes.data.IdGen
 import com.limiao.notes.data.Period
 import com.limiao.notes.data.PeriodSymptoms
 import java.util.Calendar
-import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 // ==================== 经期规则（对应 Web 版 periodOps） ====================
@@ -131,17 +141,30 @@ fun PeriodScreen(data: AppData, onSave: (AppData) -> Unit) {
     ) {
         Text("经期", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
 
-        // 今日状态卡
+        // 今日状态卡（右边：回到今日）
         Card(colors = CardDefaults.cardColors(containerColor = Primary), modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
-            Column(Modifier.padding(16.dp)) {
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (todayInPeriod) "今天在经期" else "今天不在经期",
+                        color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        next?.let { "预计下次：$it" } ?: "还没有经期记录",
+                        color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
                 Text(
-                    if (todayInPeriod) "今天在经期" else "今天不在经期",
-                    color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    next?.let { "预计下次：$it" } ?: "还没有经期记录",
-                    color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp,
+                    "回到今日",
+                    modifier = Modifier
+                        .clickable { ym = currentYm() }
+                        .background(Color.White.copy(alpha = 0.22f), RoundedCornerShape(50))
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
                 )
             }
         }
@@ -150,30 +173,76 @@ fun PeriodScreen(data: AppData, onSave: (AppData) -> Unit) {
 
         // 月份切换 + 日历
         Card(colors = CardDefaults.cardColors(containerColor = Surface)) {
-            Column(Modifier.padding(12.dp)) {
+            // clip：滑动时日历内容不溢出卡片，像在窗口里滑动
+            Column(Modifier.padding(12.dp).clip(RoundedCornerShape(12.dp))) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Text("‹", modifier = Modifier.clickable { ym = shiftMonth(ym, -1) }.padding(8.dp), color = Muted, fontSize = 18.sp)
                     Text(monthLabel(ym), modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontWeight = FontWeight.Medium)
                     Text("›", modifier = Modifier.clickable { ym = shiftMonth(ym, 1) }.padding(8.dp), color = Muted, fontSize = 18.sp)
                 }
-                // 滑动切月阈值（50dp），只在下面的日期区域内生效
-                val swipeThreshold = with(LocalDensity.current) { 50.dp.toPx() }
+                // ── 滑动切月：拖拽时日历跟手，松手后动画收尾（不生硬跳变）──
+                val swipeScope = rememberCoroutineScope()
+                val offsetAnim = remember { Animatable(0f) }
+                var dragging by remember { mutableStateOf(false) }
+                var dragTotal by remember { mutableStateOf(0f) }
+                var areaWidth by remember { mutableStateOf(0f) }
+                // 手势进行中也要能读到最新值，否则切月会拿到旧数据
+                val ymNow by rememberUpdatedState(ym)
+                val widthNow by rememberUpdatedState(areaWidth)
+
                 Column(
-                    Modifier.pointerInput(ym, swipeThreshold) {
-                        var total = 0f
-                        detectHorizontalDragGestures(
-                            onDragStart = { total = 0f },
-                            onDragCancel = { total = 0f },
-                            onDragEnd = {
-                                if (abs(total) > swipeThreshold) {
-                                    // 手指左滑(total<0)→看下一月；右滑(total>0)→看上一月
-                                    ym = if (total < 0) shiftMonth(ym, 1) else shiftMonth(ym, -1)
-                                }
-                                total = 0f
-                            },
-                            onHorizontalDrag = { _, dragAmount -> total += dragAmount },
-                        )
-                    },
+                    Modifier
+                        .onSizeChanged { areaWidth = it.width.toFloat() }
+                        // 拖拽中跟手，松手后交给动画
+                        .offset { IntOffset((if (dragging) dragTotal else offsetAnim.value).roundToInt(), 0) }
+                        // key 用 Unit：切月时不重启手势，否则动画会被打断
+                        .pointerInput(Unit) {
+                            detectHorizontalDragGestures(
+                                onDragStart = {
+                                    dragging = true
+                                    dragTotal = offsetAnim.value
+                                },
+                                onDragCancel = {
+                                    dragging = false
+                                    swipeScope.launch {
+                                        offsetAnim.snapTo(dragTotal)
+                                        offsetAnim.animateTo(0f, tween(150))
+                                        dragTotal = 0f
+                                    }
+                                },
+                                onDragEnd = {
+                                    dragging = false
+                                    swipeScope.launch {
+                                        offsetAnim.snapTo(dragTotal)
+                                        val w = widthNow.coerceAtLeast(1f)
+                                        val threshold = (w * 0.22f).coerceAtLeast(60f)
+                                        when {
+                                            // 左滑 → 下一月：先把旧月滑出，内容换掉后再从右侧滑入
+                                            dragTotal < -threshold -> {
+                                                offsetAnim.animateTo(-w, tween(150, easing = FastOutLinearInEasing))
+                                                ym = shiftMonth(ymNow, 1)
+                                                offsetAnim.snapTo(w)
+                                                offsetAnim.animateTo(0f, tween(190, easing = LinearOutSlowInEasing))
+                                            }
+                                            // 右滑 → 上一月
+                                            dragTotal > threshold -> {
+                                                offsetAnim.animateTo(w, tween(150, easing = FastOutLinearInEasing))
+                                                ym = shiftMonth(ymNow, -1)
+                                                offsetAnim.snapTo(-w)
+                                                offsetAnim.animateTo(0f, tween(190, easing = LinearOutSlowInEasing))
+                                            }
+                                            // 距离不够 → 弹回原位
+                                            else -> offsetAnim.animateTo(
+                                                0f,
+                                                spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+                                            )
+                                        }
+                                        dragTotal = 0f
+                                    }
+                                },
+                                onHorizontalDrag = { _, dragAmount -> dragTotal += dragAmount },
+                            )
+                        },
                 ) {
                 // 星期表头
                 Row(Modifier.fillMaxWidth()) {
