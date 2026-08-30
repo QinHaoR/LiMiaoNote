@@ -248,6 +248,7 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
         Card(colors = CardDefaults.cardColors(containerColor = Surface)) {
             Column(Modifier.padding(16.dp)) {
                 // 语音 / 文字 记账入口（共用同一套解析 + 预览确认）
+                // 语音识别暂不可用：国产 ROM 无标准 RecognitionService，云端 ASR 后续再做
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -255,24 +256,19 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
                     Row(
                         modifier = Modifier
                             .weight(1f)
-                            .background(Primary.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                            .background(Bg, RoundedCornerShape(14.dp))
                             .clickable {
-                                if (listening) {
-                                    listening = false
-                                    voiceRecorder.cancel()
-                                } else {
-                                    startVoice()
-                                }
+                                Toast.makeText(context, "语音识别暂不可用，先用文字记账吧", Toast.LENGTH_SHORT).show()
                             }
                             .padding(vertical = 11.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Filled.Mic, null, tint = Primary, modifier = Modifier.size(17.dp))
+                        Icon(Icons.Filled.Mic, null, tint = Muted, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.width(5.dp))
                         Text(
-                            if (listening) "正在听…（点我取消）" else "语音记账",
-                            color = Primary, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                            "语音识别暂不可用",
+                            color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Medium,
                         )
                     }
                     Row(
