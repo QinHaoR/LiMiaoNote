@@ -185,6 +185,16 @@ private fun AppRoot(repository: AppRepository) {
                     MonthsScreen(
                         data = data,
                         onOpenMonth = { ym -> navController.navigate("month?ym=$ym") },
+                        // 返回首页：栈里有上一页就退回，没有就直接去首页（兜底）
+                        onBack = {
+                            if (!navController.popBackStack()) {
+                                navController.navigate("home") {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        },
                     )
                 }
                 composable(

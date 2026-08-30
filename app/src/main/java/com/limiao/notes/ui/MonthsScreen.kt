@@ -8,23 +8,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.limiao.notes.data.AppData
 
 /** 月份总览：按月列出支出/收入/结余，点某月进月明细 */
 @Composable
-fun MonthsScreen(data: AppData, onOpenMonth: (String) -> Unit) {
+fun MonthsScreen(data: AppData, onOpenMonth: (String) -> Unit, onBack: () -> Unit) {
     val byMonth = data.transactions
         .groupBy { it.date.substring(0, 7) }
         .toSortedMap(compareByDescending { it })
@@ -35,7 +36,25 @@ fun MonthsScreen(data: AppData, onOpenMonth: (String) -> Unit) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
-        Text("月份总览", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        // 顶部：返回首页 + 标题（与月明细页样式一致）
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                "‹",
+                fontSize = 20.sp,
+                color = Muted,
+                modifier = Modifier
+                    .clickable { onBack() }
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+            )
+            Text(
+                "月份总览",
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp,
+            )
+            Spacer(Modifier.width(28.dp))
+        }
         Spacer(Modifier.height(12.dp))
 
         if (byMonth.isEmpty()) {
