@@ -64,12 +64,40 @@ object VoiceParse {
         return 0.0
     }
 
-    // ---------------- 日期 ----------------
+    // ---------------- 日期（优先级：相对词 > X月X号 > X号 > 今天） ----------------
 
-    private fun parseDate(raw: String, today: String): String = when {
-        raw.contains("前天") -> shiftDate(today, -2)
-        raw.contains("昨天") -> shiftDate(today, -1)
-        else -> today
+    private fun parseDate(raw: String, today: String): String {
+        when {
+            raw.contains("前天") -> return shiftDate(today, -2)
+            raw.contains("昨天") -> return shiftDate(today, -1)
+            raw.contains("今天") || raw.contains("刚才") -> return today
+        }
+        val p = today.split("-").map { it.toInt() }
+        val cy = p[0]; val cm = p[1]; val cd = p[2]
+        // 完整日期："8月25号" "8月25日" → 默认今年；若该日期在未来则视为去年（记账记的是过去）
+        Regex("(\\d{1,2})\\s*月\\s*(\\d{1,2})\\s*[号日]").find(raw)?.let { m ->
+            val mon = m.groupValues[1].toInt()
+            val day = m.groupValues[2].toInt()
+            if (mon in 1..12 && day in 1..31) {
+                val c = Calendar.getInstance()
+                c.set(cy, mon - 1, day)
+                if (c.timeInMillis > Calendar.getInstance().timeInMillis) {
+                    c.add(Calendar.YEAR, -1)
+                }
+                return DateFmt.ymd(c)
+            }
+        }
+        // 只有日："25号" "25日" → 默认当前月；该日已过则回退到上月（跨月/跨年由 Calendar 处理）
+        Regex("(\\d{1,2})\\s*[号日]").find(raw)?.let { m ->
+            val day = m.groupValues[1].toInt()
+            if (day in 1..31) {
+                val c = Calendar.getInstance()
+                c.set(cy, cm - 1, day)
+                if (day > cd) c.add(Calendar.MONTH, -1)
+                return DateFmt.ymd(c)
+            }
+        }
+        return today
     }
 
     private fun shiftDate(today: String, days: Int): String {
