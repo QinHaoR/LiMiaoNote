@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.limiao.notes.data.AppData
@@ -140,8 +141,18 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
                 }
             }
             Spacer(Modifier.weight(1f))
+            // ‹ › 保持切月；中间月份可点 → 进「全部月份」总览页
             Text("‹", modifier = Modifier.clickable { month = shiftMonth(month, -1) }.padding(6.dp), color = Muted, fontSize = 18.sp)
-            Text(monthLabel(month), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text(
+                monthLabel(month),
+                modifier = Modifier
+                    .clickable { onOpenMonths() }
+                    .padding(horizontal = 4.dp, vertical = 6.dp),
+                color = Primary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                textDecoration = TextDecoration.Underline,
+            )
             Text("›", modifier = Modifier.clickable { month = shiftMonth(month, 1) }.padding(6.dp), color = Muted, fontSize = 18.sp)
         }
 
@@ -314,32 +325,13 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
         if (groups.isEmpty()) {
             Text("这个月还没有记录", color = Muted, modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), textAlign = TextAlign.Center)
         } else {
-            val ctx = androidx.compose.ui.platform.LocalContext.current
             showGroups.forEach { (day, items) ->
                 Card(colors = CardDefaults.cardColors(containerColor = Surface)) {
                     Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .background(Bg)
-                            // 点日期头 → 进这一天所在月份的明细页
-                            .clickable {
-                                android.widget.Toast.makeText(ctx, "正在打开 ${day.substring(0, 7)} 明细…", android.widget.Toast.LENGTH_SHORT).show()
-                                onOpenMonthDetail(day.substring(0, 7))
-                            }
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        Modifier.fillMaxWidth().background(Bg).padding(horizontal = 14.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(day, color = Muted, fontSize = 12.sp)
-                            Text(
-                                " 查看本月明细 ›",
-                                color = Primary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(start = 6.dp),
-                            )
-                        }
+                        Text(day, color = Muted, fontSize = 12.sp)
                         val de = items.filter { it.type == "expense" }.sumOf { it.amount }
                         val di = items.filter { it.type == "income" }.sumOf { it.amount }
                         Text(
