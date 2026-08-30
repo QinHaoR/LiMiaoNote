@@ -154,6 +154,20 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
                 textDecoration = TextDecoration.Underline,
             )
             Text("›", modifier = Modifier.clickable { month = shiftMonth(month, 1) }.padding(6.dp), color = Muted, fontSize = 18.sp)
+            // 不在当前月时才显示「今天」，避免当前月白占一行空间
+            if (month != currentYm()) {
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    "今天",
+                    modifier = Modifier
+                        .clickable { month = currentYm() }
+                        .background(Primary.copy(alpha = 0.14f), RoundedCornerShape(50))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    color = Primary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
         }
 
         Spacer(Modifier.height(12.dp))
