@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -100,6 +101,8 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
     var listening by remember { mutableStateOf(false) }
     var voicePreview by remember { mutableStateOf<VoiceParsed?>(null) }
     var voiceUnavailable by remember { mutableStateOf(false) }
+    var showTextInput by remember { mutableStateOf(false) }
+    var textInput by remember { mutableStateOf("") }
     val voiceRecorder = remember(context) {
         VoiceRecorder(
             context = context.applicationContext,
@@ -244,30 +247,53 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
         // 记账卡片
         Card(colors = CardDefaults.cardColors(containerColor = Surface)) {
             Column(Modifier.padding(16.dp)) {
-                // 语音记账入口
+                // 语音 / 文字 记账入口（共用同一套解析 + 预览确认）
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Primary.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
-                        .clickable {
-                            if (listening) {
-                                listening = false
-                                voiceRecorder.cancel()
-                            } else {
-                                startVoice()
-                            }
-                        }
-                        .padding(vertical = 10.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(Icons.Filled.Mic, null, tint = Primary, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        if (listening) "正在听… 再说一次（点我取消）"
-                        else "语音记账：一句话记一笔，说清「吃了什么花了多少」",
-                        color = Primary, fontSize = 13.sp, fontWeight = FontWeight.Medium,
-                    )
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(Primary.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                            .clickable {
+                                if (listening) {
+                                    listening = false
+                                    voiceRecorder.cancel()
+                                } else {
+                                    startVoice()
+                                }
+                            }
+                            .padding(vertical = 11.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.Mic, null, tint = Primary, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            if (listening) "正在听…（点我取消）" else "语音记账",
+                            color = Primary, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                        )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(Primary.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                            .clickable {
+                                if (listening) {
+                                    listening = false
+                                    voiceRecorder.cancel()
+                                }
+                                showTextInput = true
+                            }
+                            .padding(vertical = 11.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.EditNote, null, tint = Primary, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("文字记账", color = Primary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
 
@@ -621,6 +647,46 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
             },
             dismissButton = {
                 TextButton(onClick = { voicePreview = null }) { Text("放弃") }
+            },
+        )
+    }
+
+    // 文字记账：打字一句话，走同一套解析（不依赖系统语音服务，任何手机都能用）
+    if (showTextInput) {
+        AlertDialog(
+            onDismissRequest = { showTextInput = false; textInput = "" },
+            title = { Text("文字记账") },
+            text = {
+                Column(Modifier.fillMaxWidth()) {
+                    Text(
+                        "把记账说成一句话，例如：\n「今天中午吃了碗面花了15块」\n「昨天打车花了20块」\n「工资发了5000」",
+                        color = Muted, fontSize = 12.sp,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = textInput,
+                        onValueChange = { textInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("如：中午吃了碗面花了15块") },
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val t = textInput.trim()
+                    showTextInput = false
+                    textInput = ""
+                    if (t.isNotEmpty()) {
+                        voicePreview = VoiceParse.parse(t)
+                    } else {
+                        Toast.makeText(context, "输入内容不能为空", Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text("解析") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTextInput = false; textInput = "" }) { Text("取消") }
             },
         )
     }
