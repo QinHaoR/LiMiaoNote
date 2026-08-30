@@ -29,11 +29,16 @@ class VoiceRecorder(
     fun start() {
         stopInternal()
         if (!available()) {
-            onError("此设备不支持系统语音识别")
+            onError("系统没有可用的语音识别服务")
             return
         }
         started = true
         val sr = SpeechRecognizer.createSpeechRecognizer(context)
+        if (sr == null) {
+            started = false
+            onError("无法启动语音识别服务")
+            return
+        }
         recognizer = sr
         sr.setRecognitionListener(listener)
         sr.startListening(

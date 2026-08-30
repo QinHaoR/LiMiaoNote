@@ -99,6 +99,7 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
     val context = LocalContext.current
     var listening by remember { mutableStateOf(false) }
     var voicePreview by remember { mutableStateOf<VoiceParsed?>(null) }
+    var voiceUnavailable by remember { mutableStateOf(false) }
     val voiceRecorder = remember(context) {
         VoiceRecorder(
             context = context.applicationContext,
@@ -122,7 +123,7 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
     }
     fun startVoice() {
         if (!voiceRecorder.available()) {
-            Toast.makeText(context, "此设备不支持系统语音识别", Toast.LENGTH_SHORT).show()
+            voiceUnavailable = true
             return
         }
         if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
@@ -620,6 +621,28 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
             },
             dismissButton = {
                 TextButton(onClick = { voicePreview = null }) { Text("放弃") }
+            },
+        )
+    }
+
+    // 语音识别服务不可用时，给出可操作的引导（国产 ROM 常见：没有注册识别服务的应用）
+    if (voiceUnavailable) {
+        AlertDialog(
+            onDismissRequest = { voiceUnavailable = false },
+            title = { Text("语音识别不可用") },
+            text = {
+                Text(
+                    "你的手机（Redmi/MIUI）没有安装提供语音识别服务的应用，暂时用不了语音记账。\n\n" +
+                        "解决办法（任选）：\n" +
+                        "1. 应用商店安装「讯飞输入法」（免费，自带语音识别）\n" +
+                        "2. 安装后：设置 → 更多设置 → 语言与输入法，设为默认\n" +
+                        "3. 返回这里重新点「语音记账」\n\n" +
+                        "或者先改用手动记账，等装了输入法再试。",
+                    fontSize = 14.sp,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { voiceUnavailable = false }) { Text("我知道了") }
             },
         )
     }
