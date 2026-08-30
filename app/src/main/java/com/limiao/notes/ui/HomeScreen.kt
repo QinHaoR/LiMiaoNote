@@ -279,7 +279,7 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
                 }
                 Spacer(Modifier.height(10.dp))
 
-                // 日期 + 时间（一行，居中，日期放大）
+                // 日期 + [今天] + 时间（一行，居中，日期放大）
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -293,6 +293,18 @@ fun HomeScreen(data: AppData, onSave: (AppData) -> Unit, onOpenMonths: () -> Uni
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         color = InkSoft, fontSize = 17.sp, fontWeight = FontWeight.Medium,
                     )
+                    // 选了非今天的日期时，给个快捷回今天（时间不动，用户可自行调整）
+                    if (date != DateFmt.today()) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "今天",
+                            modifier = Modifier
+                                .clickable { date = DateFmt.today() }
+                                .background(Primary.copy(alpha = 0.14f), RoundedCornerShape(50))
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                            color = Primary, fontSize = 11.sp, fontWeight = FontWeight.Medium,
+                        )
+                    }
                     Spacer(Modifier.width(8.dp))
                     Text(
                         time ?: "选时间",
