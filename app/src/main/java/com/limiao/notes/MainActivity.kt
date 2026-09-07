@@ -1,6 +1,9 @@
 package com.limiao.notes
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -34,7 +37,9 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -53,6 +58,8 @@ import com.limiao.notes.ui.Bg
 import com.limiao.notes.ui.HomeScreen
 import com.limiao.notes.ui.InkSoft
 import com.limiao.notes.ui.LiMiaoTheme
+import com.limiao.notes.ui.MdOpen
+import com.limiao.notes.ui.MdReaderScreen
 import com.limiao.notes.ui.MonthDetailScreen
 import com.limiao.notes.ui.MonthsScreen
 import com.limiao.notes.ui.Muted
@@ -63,13 +70,48 @@ import com.limiao.notes.ui.currentYm
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+
+    /** 正在阅读的 .md（非空 = 显示全屏阅读器，盖住主界面） */
+    private var mdOpen by mutableStateOf<MdOpen?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        mdOpen = parseMdOpen(intent)
         setContent {
             LiMiaoTheme {
-                AppRoot(AppRepository(applicationContext))
+                val reading = mdOpen
+                if (reading != null) {
+                    // 外部打开 .md → 全屏 Markdown 阅读器（不占底部 Tab）
+                    MdReaderScreen(reading, onClose = { mdOpen = null })
+                } else {
+                    AppRoot(AppRepository(applicationContext))
+                }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // App 已在前台时再打开别的 .md，直接切换内容
+        parseMdOpen(intent)?.let { mdOpen = it }
+    }
+
+    private fun parseMdOpen(intent: Intent?): MdOpen? {
+        if (intent?.action != Intent.ACTION_VIEW) return null
+        val uri = intent.data ?: return null
+        val name = queryDisplayName(uri)
+            ?: uri.lastPathSegment?.substringAfterLast('/')
+            ?: "文档.md"
+        return MdOpen(uri.toString(), name)
+    }
+
+    private fun queryDisplayName(uri: Uri): String? = try {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }
+    } catch (_: Exception) {
+        null
     }
 }
 
