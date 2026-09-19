@@ -13,8 +13,8 @@ android {
         applicationId = "com.limiao.notes"
         minSdk = 26 // Android 8.0+（2026 年几乎全覆盖）
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = 3
+        versionName = "0.3"
     }
 
     buildTypes {

@@ -113,7 +113,7 @@ fun SettingsScreen(data: AppData, onSave: (AppData) -> Unit) {
                 }
                 Spacer(Modifier.height(6.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("软件版本", color = Muted); Text("v0.1")
+                    Text("软件版本", color = Muted); Text(APP_VERSION)
                 }
             }
         }
@@ -213,5 +213,16 @@ private fun mergeData(current: AppData, incoming: AppData): AppData {
             avgCycleLength = incoming.settings.avgCycleLength,
             avgPeriodLength = incoming.settings.avgPeriodLength,
         ),
+        mdHistory = current.mdHistory,
+        profile = current.profile,
+        // 健康模块：体重/饮水按 date 去重，饮食按 id 去重
+        weights = mergeByDate(current.weights, incoming.weights) { it.date },
+        meals = mergeById(current.meals, incoming.meals) { it.id },
+        waterLogs = mergeByDate(current.waterLogs, incoming.waterLogs) { it.date },
+        health = if (current.health.hasTarget || current.health.heightCm > 0) {
+            current.health
+        } else {
+            incoming.health
+        },
     )
 }

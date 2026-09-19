@@ -57,6 +57,25 @@ data class CycleSettings(
     val avgPeriodLength: Int,
 )
 
+/** Markdown 打开历史（uri 持久授权后可长期重开） */
+data class MdHistory(
+    val uri: String,
+    val name: String,
+    val openedAt: Long,        // epoch millis
+)
+
+/** 本地档案：本应用无账号系统，昵称/头像只存在本机，仅用于「我的」页展示 */
+data class Profile(
+    val nickname: String,
+    val avatar: String,        // emoji，如 🐱
+) {
+    companion object {
+        val DEFAULT = Profile(nickname = "黎喵", avatar = "🐱")
+        /** 可选头像（「我的」页点头像切换） */
+        val AVATARS = listOf("🐱", "😺", "🐾", "🌸", "✨", "🍀", "🐰", "🐼", "🌙", "⭐")
+    }
+}
+
 data class AppData(
     val version: Int,
     val notes: List<Note>,
@@ -65,6 +84,13 @@ data class AppData(
     val periods: List<Period>,
     val dayNotes: List<DayNote>,
     val settings: CycleSettings,
+    val mdHistory: List<MdHistory>,
+    val profile: Profile,
+    // ===== 健康模块（体重 / 饮食 / 饮水 / 身体数据）=====
+    val weights: List<WeightRecord>,
+    val meals: List<MealEntry>,
+    val waterLogs: List<WaterLog>,
+    val health: HealthProfile,
 ) {
     companion object {
         fun empty() = AppData(
@@ -75,6 +101,12 @@ data class AppData(
             periods = emptyList(),
             dayNotes = emptyList(),
             settings = CycleSettings(avgCycleLength = 28, avgPeriodLength = 5),
+            mdHistory = emptyList(),
+            profile = Profile.DEFAULT,
+            weights = emptyList(),
+            meals = emptyList(),
+            waterLogs = emptyList(),
+            health = HealthProfile.DEFAULT,
         )
     }
 }
@@ -140,10 +172,16 @@ object CategoryColors {
 }
 
 // ==================== JSON 序列化（org.json，零额外依赖） ====================
+// 下面几个小工具是 internal，供 Models.kt 与 HealthModels.kt 共用
 
-private fun JSONObject.putOptNullable(key: String, value: String?) {
+internal fun JSONObject.putOptNullable(key: String, value: String?) {
     if (value != null) put(key, value) else put(key, JSONObject.NULL)
 }
+
+internal fun JSONObject.putStrArray(key: String, value: List<String>) {
+    put(key, JSONArray().apply { value.forEach { put(it) } })
+}
+
 
 fun AppData.toJson(): String {
     val o = JSONObject()
@@ -153,6 +191,15 @@ fun AppData.toJson(): String {
     o.put("transactions", JSONArray().apply { transactions.forEach { put(it.toJson()) } })
     o.put("periods", JSONArray().apply { periods.forEach { put(it.toJson()) } })
     o.put("dayNotes", JSONArray().apply { dayNotes.forEach { put(it.toJson()) } })
+    o.put("mdHistory", JSONArray().apply { mdHistory.forEach { put(it.toJson()) } })
+    o.put("profile", JSONObject().apply {
+        put("nickname", profile.nickname)
+        put("avatar", profile.avatar)
+    })
+    o.put("weights", JSONArray().apply { weights.forEach { put(it.toJson()) } })
+    o.put("meals", JSONArray().apply { meals.forEach { put(it.toJson()) } })
+    o.put("waterLogs", JSONArray().apply { waterLogs.forEach { put(it.toJson()) } })
+    o.put("health", health.toJson())
     o.put("settings", JSONObject().apply {
         put("avgCycleLength", settings.avgCycleLength)
         put("avgPeriodLength", settings.avgPeriodLength)
@@ -184,6 +231,10 @@ private fun DayNote.toJson() = JSONObject().apply {
     put("symptoms", JSONArray(symptoms)); put("note", note); put("updatedAt", updatedAt)
 }
 
+private fun MdHistory.toJson() = JSONObject().apply {
+    put("uri", uri); put("name", name); put("openedAt", openedAt)
+}
+
 fun parseAppData(json: String): AppData {
     return try {
         val o = JSONObject(json)
@@ -199,6 +250,18 @@ fun parseAppData(json: String): AppData {
             transactions = arr("transactions").asList { it.parseTransaction() },
             periods = arr("periods").asList { it.parsePeriod() },
             dayNotes = arr("dayNotes").asList { it.parseDayNote() },
+            mdHistory = arr("mdHistory").asList { it.parseMdHistory() },
+            profile = o.optJSONObject("profile")?.let {
+                Profile(
+                    nickname = it.optString("nickname", Profile.DEFAULT.nickname),
+                    avatar = it.optString("avatar", Profile.DEFAULT.avatar),
+                )
+            } ?: Profile.DEFAULT,
+            weights = arr("weights").asList { it.parseWeightRecord() },
+            meals = arr("meals").asList { it.parseMealEntry() },
+            waterLogs = arr("waterLogs").asList { it.parseWaterLog() },
+            health = o.optJSONObject("health")?.let { it.parseHealthProfile() }
+                ?: HealthProfile.DEFAULT,
             settings = o.optJSONObject("settings")?.let { settings(it) }
                 ?: CycleSettings(28, 5),
         )
@@ -207,7 +270,7 @@ fun parseAppData(json: String): AppData {
     }
 }
 
-private inline fun <T> JSONArray.asList(parse: (JSONObject) -> T): List<T> {
+internal inline fun <T> JSONArray.asList(parse: (JSONObject) -> T): List<T> {
     val out = ArrayList<T>(length())
     for (i in 0 until length()) {
         val o = optJSONObject(i) ?: continue
@@ -216,10 +279,10 @@ private inline fun <T> JSONArray.asList(parse: (JSONObject) -> T): List<T> {
     return out
 }
 
-private fun JSONObject.optStr(key: String): String? =
+internal fun JSONObject.optStr(key: String): String? =
     if (isNull(key)) null else optString(key)
 
-private fun JSONObject.optStrArray(key: String): List<String> {
+internal fun JSONObject.optStrArray(key: String): List<String> {
     val a = optJSONArray(key) ?: return emptyList()
     val out = ArrayList<String>(a.length())
     for (i in 0 until a.length()) out.add(a.optString(i))
@@ -254,6 +317,11 @@ private fun JSONObject.parseDayNote() = DayNote(
     date = optString("date", ""), flow = optStr("flow"),
     symptoms = optStrArray("symptoms"), note = optString("note", ""),
     updatedAt = optString("updatedAt", ""),
+)
+
+private fun JSONObject.parseMdHistory() = MdHistory(
+    uri = optString("uri", ""), name = optString("name", ""),
+    openedAt = optLong("openedAt", 0),
 )
 
 // ==================== 工具 ====================

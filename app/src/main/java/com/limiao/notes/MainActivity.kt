@@ -16,10 +16,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
@@ -54,10 +58,12 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.limiao.notes.data.AppData
 import com.limiao.notes.data.AppRepository
+import com.limiao.notes.data.MdHistory
 import com.limiao.notes.ui.Bg
 import com.limiao.notes.ui.HomeScreen
 import com.limiao.notes.ui.InkSoft
 import com.limiao.notes.ui.LiMiaoTheme
+import com.limiao.notes.ui.MdHomeScreen
 import com.limiao.notes.ui.MdOpen
 import com.limiao.notes.ui.MdReaderScreen
 import com.limiao.notes.ui.MonthDetailScreen
@@ -65,26 +71,41 @@ import com.limiao.notes.ui.MonthsScreen
 import com.limiao.notes.ui.Muted
 import com.limiao.notes.ui.NotesScreen
 import com.limiao.notes.ui.PeriodScreen
+import com.limiao.notes.ui.ProfileScreen
 import com.limiao.notes.ui.SettingsScreen
 import com.limiao.notes.ui.currentYm
+import com.limiao.notes.ui.health.HealthHomeScreen
+import com.limiao.notes.ui.health.HealthPlaceholder
+import com.limiao.notes.ui.health.HealthProfileScreen
+import com.limiao.notes.ui.health.MealScreen
+import com.limiao.notes.ui.health.WeightScreen
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
     /** 正在阅读的 .md（非空 = 显示全屏阅读器，盖住主界面） */
     private var mdOpen by mutableStateOf<MdOpen?>(null)
+    private lateinit var repository: AppRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        mdOpen = parseMdOpen(intent)
+        repository = AppRepository(applicationContext)
+        // 冷启动时直接收到"打开 .md"（VIEW），解析并打开
+        if (intent?.action == Intent.ACTION_VIEW) intent.data?.let { openUri(it) }
         setContent {
             LiMiaoTheme {
                 val reading = mdOpen
                 if (reading != null) {
-                    // 外部打开 .md → 全屏 Markdown 阅读器（不占底部 Tab）
+                    // 外部打开 / 从 Markdown 首页打开 → 全屏阅读器
                     MdReaderScreen(reading, onClose = { mdOpen = null })
                 } else {
-                    AppRoot(AppRepository(applicationContext))
+                    AppRoot(
+                        repository = repository,
+                        onOpenMdUri = { uri -> openUri(uri) },
+                        onRemoveMdHistory = { h -> removeMdHistory(h) },
+                    )
                 }
             }
         }
@@ -93,17 +114,33 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        // App 已在前台时再打开别的 .md，直接切换内容
-        parseMdOpen(intent)?.let { mdOpen = it }
+        // App 已在前台时再打开别的 .md，直接切换
+        if (intent.action == Intent.ACTION_VIEW) intent.data?.let { openUri(it) }
     }
 
-    private fun parseMdOpen(intent: Intent?): MdOpen? {
-        if (intent?.action != Intent.ACTION_VIEW) return null
-        val uri = intent.data ?: return null
-        val name = queryDisplayName(uri)
-            ?: uri.lastPathSegment?.substringAfterLast('/')
-            ?: "文档.md"
-        return MdOpen(uri.toString(), name)
+    /** 统一打开入口：持久授权 → 写历史 → 显示阅读器（SAF 选择、历史重开、外部 VIEW 都走这里） */
+    private fun openUri(uri: Uri) {
+        // 尽量拿到持久读权限（SAF 选择器/部分文件管理器授予；失败则仅本次可用）
+        runCatching {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val uriStr = uri.toString()
+        val name = queryDisplayName(uri) ?: uri.lastPathSegment?.substringAfterLast('/') ?: "文档.md"
+        lifecycleScope.launch {
+            // first() 等 DataStore 读盘完成，避免冷启动时基于空数据覆盖
+            val cur = repository.data.first()
+            val item = MdHistory(uriStr, name, System.currentTimeMillis())
+            val merged = (listOf(item) + cur.mdHistory.filter { it.uri != uriStr }).take(50)
+            repository.save(cur.copy(mdHistory = merged))
+        }
+        mdOpen = MdOpen(uriStr, name)
+    }
+
+    private fun removeMdHistory(h: MdHistory) {
+        lifecycleScope.launch {
+            val cur = repository.data.first()
+            repository.save(cur.copy(mdHistory = cur.mdHistory.filter { it.uri != h.uri }))
+        }
     }
 
     private fun queryDisplayName(uri: Uri): String? = try {
@@ -115,14 +152,39 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private val TAB_ICONS: List<Pair<String, Pair<String, ImageVector>>> = listOf(
+// ==================== 导航配置 ====================
+
+/**
+ * 底部 tab（3 个）：健康 - 花销 - 我的
+ *
+ * 经期、随手记 已从底部移动到侧边栏（也可从「我的」页的小程序宫格进入）。
+ */
+private val TABS: List<Pair<String, Pair<String, ImageVector>>> = listOf(
+    "health" to ("健康" to Icons.Filled.Favorite),
     "home" to ("花销" to Icons.Filled.AccountBalanceWallet),
-    "period" to ("经期" to Icons.Filled.CalendarMonth),
-    "notes" to ("随手记" to Icons.Filled.EditNote),
+    "profile" to ("我的" to Icons.Filled.Person),
+)
+
+/** 侧边栏的「小程序」入口（同时也是「我的」页宫格里的快捷方式） */
+private val DRAWER_APPS: List<DrawerApp> = listOf(
+    DrawerApp("period", "经期", "经期记录 · 预测推算", Icons.Filled.CalendarMonth),
+    DrawerApp("notes", "随手记", "短笔记 · 标签筛选", Icons.Filled.EditNote),
+    DrawerApp("mdhome", "Markdown 阅读", "打开 .md · 阅读历史", Icons.Filled.Description),
+)
+
+private data class DrawerApp(
+    val route: String,
+    val title: String,
+    val subtitle: String,
+    val icon: ImageVector,
 )
 
 @Composable
-private fun AppRoot(repository: AppRepository) {
+private fun AppRoot(
+    repository: AppRepository,
+    onOpenMdUri: (Uri) -> Unit,
+    onRemoveMdHistory: (MdHistory) -> Unit,
+) {
     val data by repository.data.collectAsState(initial = AppData.empty())
     val scope = rememberCoroutineScope()
     val navController = rememberNavController()
@@ -130,6 +192,12 @@ private fun AppRoot(repository: AppRepository) {
 
     fun save(next: AppData) {
         scope.launch { repository.save(next) }
+    }
+
+    /** 打开一个非底部 tab 的页面（统一走这里，顺带收起侧边栏） */
+    fun openPage(route: String) {
+        scope.launch { drawerState.close() }
+        navController.navigate(route) { launchSingleTop = true }
     }
 
     ModalNavigationDrawer(
@@ -143,14 +211,19 @@ private fun AppRoot(repository: AppRepository) {
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
                     )
                     HorizontalDivider()
+                    DRAWER_APPS.forEach { app ->
+                        DrawerItem(
+                            icon = app.icon,
+                            title = app.title,
+                            subtitle = app.subtitle,
+                            onClick = { openPage(app.route) },
+                        )
+                    }
                     DrawerItem(
                         icon = Icons.Filled.Settings,
                         title = "设置",
                         subtitle = "数据备份 · 周期参数 · 清空",
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate("settings") { launchSingleTop = true }
-                        },
+                        onClick = { openPage("settings") },
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
@@ -187,7 +260,7 @@ private fun AppRoot(repository: AppRepository) {
                 NavigationBar {
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
-                    TAB_ICONS.forEach { (route, pair) ->
+                    TABS.forEach { (route, pair) ->
                         val (label, icon) = pair
                         NavigationBarItem(
                             selected = currentRoute == route,
@@ -207,11 +280,23 @@ private fun AppRoot(repository: AppRepository) {
         ) { padding ->
             NavHost(
                 navController = navController,
-                startDestination = "home",
+                startDestination = "health",
                 modifier = Modifier
                     .padding(padding)
                     .fillMaxSize(),
             ) {
+                // ---- 底部 tab ----
+                composable("health") {
+                    HealthHomeScreen(
+                        data = data,
+                        onSave = ::save,
+                        onOpenWeight = { navController.navigate("health_weight") { launchSingleTop = true } },
+                        onOpenMeal = { navController.navigate("health_meal") { launchSingleTop = true } },
+                        onOpenProfile = { navController.navigate("health_profile") { launchSingleTop = true } },
+                        onOpenReport = { navController.navigate("health_report") { launchSingleTop = true } },
+                        onOpenAi = { navController.navigate("health_ai") { launchSingleTop = true } },
+                    )
+                }
                 composable("home") {
                     HomeScreen(
                         data = data,
@@ -220,9 +305,68 @@ private fun AppRoot(repository: AppRepository) {
                         onOpenMonthDetail = { ym -> navController.navigate("month?ym=$ym") },
                     )
                 }
+                composable("profile") {
+                    ProfileScreen(
+                        data = data,
+                        onSave = ::save,
+                        onOpenPeriod = { openPage("period") },
+                        onOpenNotes = { openPage("notes") },
+                        onOpenMdHome = { openPage("mdhome") },
+                        onOpenSettings = { openPage("settings") },
+                    )
+                }
+
+                // ---- 健康模块二级页 ----
+                composable("health_weight") {
+                    WeightScreen(
+                        data = data,
+                        onSave = ::save,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable("health_meal") {
+                    MealScreen(
+                        data = data,
+                        onSave = ::save,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable("health_profile") {
+                    HealthProfileScreen(
+                        data = data,
+                        onSave = ::save,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable("health_report") {
+                    HealthPlaceholder(
+                        icon = Icons.Filled.Description,
+                        title = "报告",
+                        desc = "周报 / 月报、体重变化与摄入分析正在做\n后续这里还会加上 AI 趋势解读",
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable("health_ai") {
+                    HealthPlaceholder(
+                        icon = Icons.AutoMirrored.Filled.Chat,
+                        title = "AI 助手",
+                        desc = "接入 DeepSeek 后的对话式记录与分析\n暂时还没接，先留好入口",
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+
+                // ---- 侧边栏 / 小程序 ----
                 composable("period") { PeriodScreen(data = data, onSave = ::save) }
                 composable("notes") { NotesScreen(data = data, onSave = ::save) }
                 composable("settings") { SettingsScreen(data = data, onSave = ::save) }
+                composable("mdhome") {
+                    MdHomeScreen(
+                        history = data.mdHistory,
+                        onOpenUri = onOpenMdUri,
+                        onRemove = onRemoveMdHistory,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
                 composable("months") {
                     MonthsScreen(
                         data = data,

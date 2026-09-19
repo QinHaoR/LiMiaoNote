@@ -2,6 +2,9 @@ package com.limiao.notes.ui
 
 import java.util.Calendar
 
+/** 应用版本（改版本号时：这里 + app/build.gradle.kts 的 versionName 一起改） */
+internal const val APP_VERSION = "v0.3"
+
 /** 当前月 "YYYY-MM" */
 internal fun currentYm(): String {
     val c = Calendar.getInstance()
