@@ -6,26 +6,29 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.ListItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +39,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.limiao.notes.data.AppData
@@ -50,31 +55,58 @@ import com.limiao.notes.data.MealTypes
 import com.limiao.notes.data.fmt0
 import com.limiao.notes.data.fmt1
 import com.limiao.notes.data.prettyDate
+import com.limiao.notes.ui.Accent
+import com.limiao.notes.ui.AccentSoft
 import com.limiao.notes.ui.Bg
-import com.limiao.notes.ui.IncomeGreen
-import com.limiao.notes.ui.Ink
-import com.limiao.notes.ui.InkSoft
-import com.limiao.notes.ui.Line
-import com.limiao.notes.ui.Muted
-import com.limiao.notes.ui.Primary
+import com.limiao.notes.ui.CardBg
+import com.limiao.notes.ui.Danger
+import com.limiao.notes.ui.Success
+import com.limiao.notes.ui.SuccessSoft
+import com.limiao.notes.ui.TextPrimary
+import com.limiao.notes.ui.TextSecondary
+import com.limiao.notes.ui.TextTertiary
+import com.limiao.notes.ui.Water
+import com.limiao.notes.ui.WaterSoft
+import com.limiao.notes.ui.numFilter
+import com.limiao.notes.ui.components.BigNumber
+import com.limiao.notes.ui.components.FoodRow
+import com.limiao.notes.ui.components.GhostButton
+import com.limiao.notes.ui.components.LTitleTopBar
+import com.limiao.notes.ui.components.ListRow
+import com.limiao.notes.ui.components.MacroRow
+import com.limiao.notes.ui.components.MacroSpec
+import com.limiao.notes.ui.components.PillButton
+import com.limiao.notes.ui.components.RingProgress
+import com.limiao.notes.ui.components.SectionLabel
+import com.limiao.notes.ui.components.SegRow
+import com.limiao.notes.ui.components.SheetActionRow
+import com.limiao.notes.ui.components.SheetDivider
+import com.limiao.notes.ui.components.SheetShell
+import com.limiao.notes.ui.components.SkinCard
+import com.limiao.notes.ui.components.StepButton
+import com.limiao.notes.ui.components.ThinBar
+import com.limiao.notes.ui.components.ThinDivider
+import com.limiao.notes.ui.components.rememberSheetStateExpanded
+import com.limiao.notes.ui.theme.Dim
+import com.limiao.notes.ui.theme.Typ
 
-private val OverRed = Color(0xFFDC2626)
-
-/** 每餐次配色（沿用全站分类配色风格） */
+/** 每餐次配色（全部取自皮肤令牌，不写死色值） */
+@Composable
 private fun mealPalette(mealType: String): Pair<Color, Color> = when (mealType) {
-    "早餐" -> Color(0xFFB45309) to Color(0xFFFEF3C7)
-    "午餐" -> Color(0xFF9A3412) to Color(0xFFFFEDD5)
-    "晚餐" -> Color(0xFF6D28D9) to Color(0xFFEDE9FE)
-    else -> Color(0xFF0369A1) to Color(0xFFE0F2FE)
+    "早餐" -> Accent to AccentSoft
+    "午餐" -> Success to SuccessSoft
+    "晚餐" -> Water to WaterSoft
+    else -> TextSecondary to Bg
 }
 
 /**
  * ③ 饮食
  *
- * 录入有三条路，前两条永远可用（不依赖网络）：
- *   1. 本地食物库检索（内置热量表）
- *   2. 手动填克数与热量
- *   （DeepSeek 接入后会再补「文字 → AI 换算」与「拍照 → AI 识别」，失败自动退回前两条）
+ * 录入方式（前三条永远可用，完全不依赖网络）：
+ *   1. **一句话记一顿** —— 打字或说话描述这一顿，本地规则解析成多条记录（见 `data/MealParse.kt`）
+ *   2. 本地食物库检索（内置热量表，离线可用）
+ *   3. 手动填克数与热量（最终兜底，任何情况都能记上）
+ *   （DeepSeek 接入后会再加「拍照 → AI 识别」，失败自动退回前三条）
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,6 +119,7 @@ fun MealScreen(
     var date by remember { mutableStateOf(today) }
     var addingTo by remember { mutableStateOf<String?>(null) }
     var deleting by remember { mutableStateOf<MealEntry?>(null) }
+    var textRecording by remember { mutableStateOf(false) }
 
     val h = data.health
     val cur = HealthData.currentWeight(data)
@@ -107,86 +140,137 @@ fun MealScreen(
             .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp),
     ) {
-        HealthTopBar("饮食", onBack)
+        LTitleTopBar("饮食", onBack)
 
-        Column(Modifier.padding(horizontal = 16.dp)) {
+        Column(Modifier.padding(horizontal = Dim.screen)) {
 
             // ===== 日期切换 =====
-            HCard(padding = 10.dp) {
+            SkinCard(padding = 10.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    ArrowBox("‹") { date = shiftDate(date, -1) }
+                    StepButton("‹") { date = shiftDate(date, -1) }
                     Column(
                         Modifier.weight(1f),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Text(prettyDate(date), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            if (date == today) "今天" else prettyDate(date),
+                            fontSize = 15.sp, fontWeight = FontWeight.Medium, color = TextPrimary,
+                        )
                         if (date != today) {
                             Text(
                                 "点这里回到今天",
-                                fontSize = 11.sp, color = Primary,
+                                fontSize = 11.sp, color = Accent,
                                 modifier = Modifier
                                     .padding(top = 2.dp)
                                     .clickable { date = today },
                             )
                         }
                     }
-                    ArrowBox("›", enabled = date < today) {
-                        if (date < today) date = shiftDate(date, 1)
-                    }
+                    StepButton(
+                        "›",
+                    ) { if (date < today) date = shiftDate(date, 1) }
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Dim.gapSection))
 
-            // ===== 每日汇总 =====
-            HCard {
+            // ===== 一句话记一顿（打字 / 语音，解析后自动入库）=====
+            SkinCard(padding = 0.dp) {
+                ListRow(
+                    icon = Icons.Filled.EditNote,
+                    title = "一句话记一顿",
+                    subtitle = "打字或说话，自动拆成记录并算好热量",
+                    iconTint = Accent,
+                    onClick = { textRecording = true },
+                )
+            }
+
+            Spacer(Modifier.height(Dim.gapSection))
+
+            // ===== 每日汇总（圆环）=====
+            SkinCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    HLabel("摄入预算")
+                    SectionLabel("摄入预算")
                     Spacer(Modifier.weight(1f))
                     if (budget > 0) {
                         val badge = if (over) "已超标" else "进行中"
-                        val c = if (over) OverRed else IncomeGreen
+                        val c = if (over) Danger else Success
                         Box(
                             Modifier
-                                .clip(RoundedCornerShape(20.dp))
+                                .clip(RoundedCornerShape(Dim.radiusChip))
                                 .background(c.copy(alpha = 0.12f))
-                                .padding(horizontal = 9.dp, vertical = 3.dp),
+                                .padding(horizontal = 10.dp, vertical = 3.dp),
                         ) { Text(badge, fontSize = 11.sp, color = c) }
                     }
                 }
-                Spacer(Modifier.height(10.dp))
-                HNumber(fmt0(intake), 32, unit = "kcal")
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    if (budget > 0) {
-                        "预算 ${fmt0(budget)} kcal · " +
-                                (if (over) "已超 ${fmt0(-left)}" else "剩余 ${fmt0(left)}") + " kcal"
-                    } else {
-                        "先在「身体数据」里填身高体重，才能算出预算"
-                    },
-                    fontSize = 12.sp,
-                    color = if (over) OverRed else Muted,
+
+                Spacer(Modifier.height(14.dp))
+
+                if (budget <= 0) {
+                    Text(
+                        "先在「身体数据」里填身高体重，才能算出预算",
+                        fontSize = 13.sp, color = TextTertiary,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    BigNumber(fmt0(intake), unit = "kcal", style = Typ.big)
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            SectionLabel("饮食摄入")
+                            Spacer(Modifier.height(6.dp))
+                            BigNumber(fmt0(intake), style = Typ.mid)
+                            Spacer(Modifier.height(2.dp))
+                            Text("千卡", fontSize = 11.sp, color = TextTertiary)
+                        }
+                        RingProgress(
+                            progress = (intake / budget).toFloat(),
+                            diameter = 122.dp,
+                            stroke = 10.dp,
+                            color = if (over) Danger else Accent,
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    if (over) "已超出" else "还可摄入",
+                                    fontSize = 11.sp, color = TextTertiary,
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                BigNumber(
+                                    fmt0(Math.abs(left)),
+                                    style = Typ.big,
+                                    color = if (over) Danger else TextPrimary,
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text("推荐 ${fmt0(budget)}", fontSize = 11.sp, color = TextTertiary)
+                            }
+                        }
+                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                            SectionLabel(if (over) "超出" else "剩余")
+                            Spacer(Modifier.height(6.dp))
+                            BigNumber(
+                                fmt0(Math.abs(left)),
+                                style = Typ.mid,
+                                color = if (over) Danger else Success,
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text("千卡", fontSize = 11.sp, color = TextTertiary)
+                        }
+                    }
+                }
+
+                // 营养素
+                Spacer(Modifier.height(16.dp))
+                ThinDivider()
+                Spacer(Modifier.height(14.dp))
+                MacroRow(
+                    specs = listOf(
+                        MacroSpec("碳水", macros.first, targets.carbsG),
+                        MacroSpec("蛋白", macros.second, targets.proteinG),
+                        MacroSpec("脂肪", macros.third, targets.fatG),
+                    ),
                 )
-                if (budget > 0) {
-                    Spacer(Modifier.height(10.dp))
-                    HBar((intake / budget).toFloat(), if (over) OverRed else Primary)
-                }
             }
 
-            Spacer(Modifier.height(12.dp))
-
-            // ===== 营养素 =====
-            HCard {
-                HLabel("营养素占比")
-                Spacer(Modifier.height(12.dp))
-                Row(Modifier.fillMaxWidth()) {
-                    MacroCell("碳水", macros.first, targets.carbsG)
-                    MacroCell("蛋白质", macros.second, targets.proteinG)
-                    MacroCell("脂肪", macros.third, targets.fatG)
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Dim.gapSection))
 
             // ===== 四餐次 =====
             MealTypes.ALL.forEach { mt ->
@@ -197,9 +281,23 @@ fun MealScreen(
                     onAdd = { addingTo = mt },
                     onDelete = { deleting = it },
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Dim.gapSection))
             }
         }
+    }
+
+    // ===== 一句话记一顿（打字 / 语音）=====
+    if (textRecording) {
+        MealTextSheet(
+            viewedDate = date,
+            onDismiss = { textRecording = false },
+            onSave = { entries ->
+                onSave(data.copy(meals = data.meals + entries))
+                // 记完跳到这次记录所在的那天，方便马上核对结果
+                entries.firstOrNull()?.let { date = it.date }
+                textRecording = false
+            },
+        )
     }
 
     // ===== 添加食物 =====
@@ -219,57 +317,34 @@ fun MealScreen(
     deleting?.let { e ->
         ModalBottomSheet(
             onDismissRequest = { deleting = null },
-            sheetState = rememberModalBottomSheetState(),
+            sheetState = rememberSheetStateExpanded(),
+            containerColor = CardBg,
+            dragHandle = null,
         ) {
-            Text(
-                "${e.foodName}　${fmt0(e.calories)} kcal",
-                fontSize = 13.sp, color = Muted,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-            )
-            ListItem(
-                headlineContent = { Text("删除这条记录", color = OverRed) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        onSave(data.copy(meals = data.meals.filter { it.id != e.id }))
-                        deleting = null
-                    },
-            )
-            Spacer(Modifier.height(24.dp))
+            SheetShell(
+                title = e.foodName,
+                onClose = { deleting = null },
+            ) {
+                Text(
+                    "${fmt0(e.calories)} kcal" +
+                            (if (e.grams > 0) " · ${fmt0(e.grams)} g" else ""),
+                    fontSize = 13.sp, color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
+                )
+                Spacer(Modifier.height(10.dp))
+                SheetDivider()
+                SheetActionRow("删除这条记录", danger = true) {
+                    onSave(data.copy(meals = data.meals.filter { it.id != e.id }))
+                    deleting = null
+                }
+                Spacer(Modifier.height(12.dp))
+            }
         }
     }
 }
 
 // ==================== 局部组件 ====================
 
-@Composable
-private fun ArrowBox(text: String, enabled: Boolean = true, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(Bg)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 15.dp, vertical = 6.dp),
-    ) {
-        Text(text, fontSize = 18.sp, color = if (enabled) InkSoft else Line)
-    }
-}
-
-@Composable
-private fun RowScope.MacroCell(label: String, actual: Double, target: Double) {
-    Column(Modifier.weight(1f)) {
-        Text(label, fontSize = 12.sp, color = Muted)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            if (target > 0) "${fmt0(actual)}/${fmt0(target)} g" else "${fmt0(actual)} g",
-            fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Ink,
-        )
-        Spacer(Modifier.height(6.dp))
-        Box(Modifier.padding(end = 10.dp)) {
-            HBar(if (target > 0) (actual / target).toFloat() else 0f, Primary, 5.dp)
-        }
-    }
-}
 
 @Composable
 private fun MealSection(
@@ -282,45 +357,42 @@ private fun MealSection(
     val (tint, chipBg) = mealPalette(mealType)
     val total = entries.sumOf { it.calories }
 
-    HCard {
+    SkinCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(Dim.radiusInner))
                     .background(chipBg)
-                    .padding(horizontal = 9.dp, vertical = 3.dp),
+                    .padding(horizontal = 10.dp, vertical = 3.dp),
             ) { Text(mealType, fontSize = 12.sp, color = tint, fontWeight = FontWeight.Medium) }
             Spacer(Modifier.width(10.dp))
             Text(
-                if (entries.isEmpty()) "—" else "${fmt0(total)} kcal",
-                fontSize = 12.sp, color = Muted,
+                if (entries.isEmpty()) "还没记录" else "${fmt0(total)} kcal",
+                fontSize = 12.sp, color = TextTertiary,
                 modifier = Modifier.weight(1f),
             )
             Box(
                 Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Primary.copy(alpha = 0.10f))
+                    .clip(RoundedCornerShape(Dim.radiusChip))
+                    .background(AccentSoft)
                     .clickable(onClick = onAdd)
-                    .padding(horizontal = 11.dp, vertical = 4.dp),
-            ) { Text("＋ 添加", fontSize = 12.sp, color = Primary) }
+                    .padding(horizontal = 12.dp, vertical = 5.dp),
+            ) { Text("＋ 添加", fontSize = 12.sp, color = Accent) }
         }
 
-        if (entries.isEmpty()) {
-            Spacer(Modifier.height(8.dp))
-            Text("还没有记录", fontSize = 12.sp, color = Muted)
-        } else {
-            Spacer(Modifier.height(4.dp))
+        if (entries.isNotEmpty()) {
             entries.forEach { e ->
-                HorizontalDivider(color = Line)
+                Spacer(Modifier.height(10.dp))
+                ThinDivider()
                 Row(
                     Modifier
                         .fillMaxWidth()
                         .clickable { onDelete(e) }
-                        .padding(vertical = 10.dp),
+                        .padding(vertical = 11.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(e.foodName, fontSize = 13.sp, color = Ink)
+                        Text(e.foodName, fontSize = 14.sp, color = TextPrimary)
                         val sub = buildString {
                             if (e.grams > 0) append("${fmt0(e.grams)} g")
                             if (e.carbs > 0 || e.protein > 0 || e.fat > 0) {
@@ -330,28 +402,32 @@ private fun MealSection(
                         }
                         if (sub.isNotEmpty()) {
                             Text(
-                                sub, fontSize = 11.sp, color = Muted,
+                                sub, fontSize = 11.sp, color = TextTertiary,
                                 modifier = Modifier.padding(top = 2.dp),
                             )
                         }
                     }
                     Text(
                         "${fmt0(e.calories)} kcal",
-                        fontSize = 13.sp, fontWeight = FontWeight.Medium, color = InkSoft,
+                        fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextSecondary,
                     )
                 }
             }
             if (budgetInMeal > 0 && total > budgetInMeal) {
-                Spacer(Modifier.height(6.dp))
-                Text("这一顿已超过全天预算", fontSize = 11.sp, color = OverRed)
+                Spacer(Modifier.height(8.dp))
+                Text("这一顿已超过全天预算", fontSize = 11.sp, color = Danger)
             }
         }
     }
 }
 
 /**
- * 添加食物弹层（底部弹出，不用对话框 —— 里面要放可滚动列表，弹层不存在嵌套滚动问题）。
- * 「食物库」走内置热量表（离线可用）；「手动填写」是最终兜底，任何情况都能记上。
+ * 添加食物弹层。
+ *
+ * 用底部弹层而不是对话框 —— 里面要放可滚动列表，AlertDialog 的内容区自带
+ * verticalScroll，再嵌 LazyColumn 会命中「infinity maximum height」崩溃。
+ *
+ * **两条录入路径都必须保留**：食物库（离线可用）+ 手动填写（任何情况都能记上）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -409,177 +485,236 @@ private fun AddFoodSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        sheetState = rememberSheetStateExpanded(),
+        containerColor = CardBg,
+        dragHandle = null,
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 28.dp),
+        // 三段式布局：顶部（切换 + 搜索）/ 中间（列表，自己滚动）/ 底部（操作区，常驻）
+        // 弹层固定 0.9 屏高，中间列表用 weight(1f) 吃掉剩余空间 ——
+        // 于是「点完食物还得往下滑才能保存」的问题就不存在了。
+        SheetShell(
+            title = "记录$mealType",
+            onClose = onDismiss,
+            modifier = Modifier.fillMaxHeight(0.9f),
         ) {
-            Text("记录$mealType", fontSize = 16.sp, fontWeight = FontWeight.Medium)
-            Spacer(Modifier.height(14.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                HChip("食物库", mode == 0) { mode = 0 }
-                HChip("手动填写", mode == 1) { mode = 1 }
-            }
-            Spacer(Modifier.height(14.dp))
+            // 两档录入方式
+            SegRow(
+                options = listOf("食物库", "手动填写"),
+                selectedIndex = mode,
+                modifier = Modifier.padding(horizontal = 20.dp),
+                onSelect = { mode = it },
+            )
+            Spacer(Modifier.height(12.dp))
 
             if (mode == 0) {
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
                     singleLine = true,
-                    placeholder = { Text("搜食物，如「米饭」", color = Muted) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(10.dp))
-                LazyColumn(Modifier.heightIn(max = 220.dp)) {
-                    items(results, key = { it.name }) { item ->
-                        val sel = picked?.name == item.name
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { picked = item }
-                                .padding(vertical = 9.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(item.name, fontSize = 13.sp, color = Ink)
-                                Text(
-                                    "${item.cat} · ${fmt0(item.kcal)} kcal / 100g",
-                                    fontSize = 11.sp, color = Muted,
-                                )
-                            }
-                            if (sel) Text("✓ 已选", fontSize = 11.sp, color = Primary)
+                    placeholder = { Text("搜食物，如「米饭」", color = TextTertiary) },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Filled.Search, null,
+                            tint = TextTertiary, modifier = Modifier.size(18.dp),
+                        )
+                    },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            Icon(
+                                Icons.Filled.Close, "清空",
+                                tint = TextTertiary,
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .clickable { query = "" }
+                                    .padding(6.dp),
+                            )
                         }
-                        HorizontalDivider(color = Line)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    if (results.isEmpty()) "没有匹配的食物" else "${results.size} 个结果",
+                    fontSize = 11.sp, color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                )
+
+                // ===== 中间：结果列表（占满剩余高度，自己滚动）=====
+                if (results.isEmpty()) {
+                    Box(
+                        Modifier.weight(1f).fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            "没找到「$query」\n换个词试试，或切到「手动填写」",
+                            fontSize = 13.sp, color = TextTertiary,
+                            textAlign = TextAlign.Center, lineHeight = 21.sp,
+                        )
+                    }
+                } else {
+                    LazyColumn(Modifier.weight(1f)) {
+                        items(results, key = { it.name }) { item ->
+                            FoodRow(
+                                name = item.name,
+                                detail = "${item.cat} · ${fmt0(item.kcal)} 千卡 / 100 克",
+                                selected = picked?.name == item.name,
+                                showDivider = item != results.last(),
+                                onClick = { picked = item },
+                            )
+                        }
                     }
                 }
 
-                if (picked != null) {
-                    Spacer(Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            picked!!.name,
-                            fontSize = 13.sp, fontWeight = FontWeight.Medium,
-                            color = Ink, modifier = Modifier.weight(1f),
+            } else {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp),
+                ) {
+                    OutlinedTextField(
+                        value = mName,
+                        onValueChange = { mName = it },
+                        singleLine = true,
+                        label = { Text("食物名称") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = mKcal, onValueChange = { mKcal = numFilter(it) },
+                            singleLine = true, label = { Text("热量") },
+                            suffix = { Text("kcal", color = TextTertiary) },
+                            modifier = Modifier.weight(1.2f),
                         )
                         OutlinedTextField(
-                            value = grams,
-                            onValueChange = { grams = numFilter(it) },
-                            singleLine = true,
-                            suffix = { Text("g", color = Muted) },
-                            modifier = Modifier.width(108.dp),
+                            value = grams, onValueChange = { grams = numFilter(it) },
+                            singleLine = true, label = { Text("份量") },
+                            suffix = { Text("g", color = TextTertiary) },
+                            modifier = Modifier.weight(1f),
                         )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FoodLib.PORTIONS.forEach { p ->
-                            Box(
-                                Modifier
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(Bg)
-                                    .clickable { grams = p.toString() }
-                                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                            ) { Text("${p}g", fontSize = 11.sp, color = InkSoft) }
-                        }
                     }
                     Spacer(Modifier.height(10.dp))
-                    if (preview != null && g > 0) {
-                        Text(
-                            "≈ ${fmt0(preview.kcal)} kcal · 碳 ${fmt1(preview.carbs)}g" +
-                                    " · 蛋 ${fmt1(preview.protein)}g · 脂 ${fmt1(preview.fat)}g",
-                            fontSize = 13.sp, color = Primary, fontWeight = FontWeight.Medium,
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = mCarb, onValueChange = { mCarb = numFilter(it) },
+                            singleLine = true, label = { Text("碳水") },
+                            suffix = { Text("g", color = TextTertiary) },
+                            modifier = Modifier.weight(1f),
                         )
-                    } else {
-                        Text("请填写克数", fontSize = 12.sp, color = Muted)
+                        OutlinedTextField(
+                            value = mPro, onValueChange = { mPro = numFilter(it) },
+                            singleLine = true, label = { Text("蛋白") },
+                            suffix = { Text("g", color = TextTertiary) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = mFat, onValueChange = { mFat = numFilter(it) },
+                            singleLine = true, label = { Text("脂肪") },
+                            suffix = { Text("g", color = TextTertiary) },
+                            modifier = Modifier.weight(1f),
+                        )
                     }
+                    Spacer(Modifier.height(10.dp))
+                    Text("三大营养素可以不填，只记热量也能用", fontSize = 11.sp, color = TextTertiary)
                 }
-            } else {
-                OutlinedTextField(
-                    value = mName,
-                    onValueChange = { mName = it },
-                    singleLine = true,
-                    label = { Text("食物名称") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = mKcal, onValueChange = { mKcal = numFilter(it) },
-                        singleLine = true, label = { Text("热量") },
-                        suffix = { Text("kcal", color = Muted) },
-                        modifier = Modifier.weight(1.2f),
-                    )
-                    OutlinedTextField(
-                        value = grams, onValueChange = { grams = numFilter(it) },
-                        singleLine = true, label = { Text("份量") },
-                        suffix = { Text("g", color = Muted) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = mCarb, onValueChange = { mCarb = numFilter(it) },
-                        singleLine = true, label = { Text("碳水") },
-                        suffix = { Text("g", color = Muted) },
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = mPro, onValueChange = { mPro = numFilter(it) },
-                        singleLine = true, label = { Text("蛋白") },
-                        suffix = { Text("g", color = Muted) },
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = mFat, onValueChange = { mFat = numFilter(it) },
-                        singleLine = true, label = { Text("脂肪") },
-                        suffix = { Text("g", color = Muted) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                Spacer(Modifier.height(10.dp))
-                Text("三大营养素可以不填，只记热量也能用", fontSize = 11.sp, color = Muted)
             }
 
-            Spacer(Modifier.height(18.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Bg)
-                        .clickable(onClick = onDismiss)
-                        .padding(vertical = 12.dp),
-                    contentAlignment = Alignment.Center,
-                ) { Text("取消", fontSize = 14.sp, color = Muted) }
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (canSave) Primary else Line)
-                        .clickable(enabled = canSave) { save() }
-                        .padding(vertical = 12.dp),
-                    contentAlignment = Alignment.Center,
+            // ===== 底部常驻操作区（永远在屏幕里，不用往下滑）=====
+            Spacer(Modifier.height(10.dp))
+            ThinDivider()
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+
+                if (mode == 0) {
+                    val p = picked
+                    if (p == null) {
+                        Text("从上面选一个食物", fontSize = 12.sp, color = TextTertiary)
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    p.name,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = TextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    if (preview != null && g > 0) {
+                                        "≈ ${fmt0(preview.kcal)} 千卡 · 碳 ${fmt1(preview.carbs)} · " +
+                                                "蛋 ${fmt1(preview.protein)} · 脂 ${fmt1(preview.fat)} g"
+                                    } else {
+                                        "请填写克数"
+                                    },
+                                    fontSize = 11.sp,
+                                    color = if (preview != null && g > 0) Accent else TextTertiary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            OutlinedTextField(
+                                value = grams,
+                                onValueChange = { grams = numFilter(it) },
+                                singleLine = true,
+                                suffix = { Text("g", color = TextTertiary) },
+                                modifier = Modifier.width(104.dp),
+                            )
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            FoodLib.PORTIONS.forEach { portion ->
+                                val sel = grams == portion.toString()
+                                Box(
+                                    Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(Dim.radiusChip))
+                                        .background(if (sel) AccentSoft else Bg)
+                                        .clickable { grams = portion.toString() }
+                                        .padding(vertical = 7.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        "${portion}g",
+                                        fontSize = 11.sp,
+                                        color = if (sel) Accent else TextSecondary,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                }
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        "保存到$mealType",
-                        fontSize = 14.sp,
-                        color = if (canSave) Color.White else Muted,
-                        fontWeight = FontWeight.Medium,
-                    )
+                    Box(Modifier.weight(1f)) {
+                        GhostButton("取消", onClick = onDismiss)
+                    }
+                    Box(Modifier.weight(1.5f)) {
+                        PillButton(
+                            text = "保存到$mealType",
+                            enabled = canSave,
+                            onClick = { save() },
+                        )
+                    }
                 }
             }
         }
     }
 }
-
-/** 数字输入过滤：只允许数字和小数点，且长度受限 */
-private fun numFilter(s: String): String =
-    if (s.length <= 7 && s.all { it.isDigit() || it == '.' }) s else s.dropLast(1)
 
 /** 日期加减（YYYY-MM-DD） */
 private fun shiftDate(date: String, delta: Int): String = try {
