@@ -3,6 +3,7 @@ package com.limiao.notes.ui
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,6 +54,7 @@ import kotlinx.coroutines.withContext
 data class MdOpen(val uriString: String, val name: String)
 
 private val CodeBg = Color(0xFFF4F4F5)
+private val CodeInlineBg = Color(0xFFEDEEF0)
 private val QuoteBg = Primary.copy(alpha = 0.05f)
 
 @Composable
@@ -226,10 +228,49 @@ private fun MdBlockView(b: MdBlock) {
                 }
             }
         }
+        is MdBlock.Table -> TableView(b)
         is MdBlock.Divider -> HorizontalDivider(
             Modifier.padding(vertical = 10.dp),
             color = Line.copy(alpha = 0.8f),
         )
+    }
+}
+
+@Composable
+private fun TableView(t: MdBlock.Table) {
+    val cols = maxOf(t.headers.size, t.rows.maxOfOrNull { it.size } ?: 0)
+    if (cols == 0) return
+    val norm: (List<String>) -> List<String> = { cells -> List(cols) { i -> cells.getOrElse(i) { "" } } }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+            .background(Surface, RoundedCornerShape(10.dp))
+            .border(1.dp, Line, RoundedCornerShape(10.dp)),
+    ) {
+        // 表头行
+        Row(Modifier.fillMaxWidth().background(Bg)) {
+            norm(t.headers).forEach { h ->
+                Text(
+                    inlineAnnotated(Markdown.inline(h)),
+                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Ink,
+                    modifier = Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 8.dp),
+                )
+            }
+        }
+        // 数据行
+        t.rows.forEachIndexed { idx, row ->
+            HorizontalDivider(color = Line)
+            Row(Modifier.fillMaxWidth().background(Surface)) {
+                norm(row).forEach { cell ->
+                    Text(
+                        inlineAnnotated(Markdown.inline(cell)),
+                        fontSize = 13.sp, lineHeight = 19.sp, color = Ink,
+                        modifier = Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 7.dp),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -273,7 +314,14 @@ private fun AnnotatedString.Builder.appendInline(
                 pop()
             }
             is MdInline.Code -> {
-                pushStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = InkSoft))
+                pushStyle(
+                    SpanStyle(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 13.sp,
+                        background = CodeInlineBg,
+                        color = Ink,
+                    )
+                )
                 append(sp.s)
                 pop()
             }

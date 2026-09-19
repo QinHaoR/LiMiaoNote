@@ -28,6 +28,7 @@ sealed class MdBlock {
     data class CodeBlock(val lang: String, val code: String) : MdBlock()
     data class Blockquote(val inlines: List<MdInline>) : MdBlock()
     data class ListBlock(val ordered: Boolean, val items: List<List<MdInline>>) : MdBlock()
+    data class Table(val headers: List<String>, val rows: List<List<String>>) : MdBlock()
     data object Divider : MdBlock()
 }
 
@@ -90,6 +91,22 @@ object Markdown {
                 continue
             }
 
+            // 表格：当前行含 |，且下一行是 |---| 分隔行
+            if (trimmed.contains("|") && i + 1 < n && isTableSeparator(lines[i + 1])) {
+                val headers = splitCells(trimmed)
+                val rows = mutableListOf<List<String>>()
+                i += 2
+                while (i < n) {
+                    val t = lines[i].trim()
+                    if (t.isEmpty()) break
+                    if (!t.contains("|")) break
+                    rows.add(splitCells(t))
+                    i++
+                }
+                blocks.add(MdBlock.Table(headers, rows))
+                continue
+            }
+
             // 列表
             val ul = Regex("^[-*+]\\s+(.*)$").matchEntire(trimmed)
             val ol = Regex("^\\d+\\.\\s+(.*)$").matchEntire(trimmed)
@@ -131,6 +148,19 @@ object Markdown {
     }
 
     // ---------------- 行内解析 ----------------
+
+    /** 供 UI 渲染表格单元格等场景使用的公开入口 */
+    fun inline(text: String): List<MdInline> = parseInline(text)
+
+    private fun isTableSeparator(line: String): Boolean {
+        val t = line.trim()
+        return t.contains("---") && t.matches(Regex("^[|:\\-\\s]+$"))
+    }
+
+    private fun splitCells(line: String): List<String> {
+        val parts = line.split("|").map { it.trim() }
+        return parts.dropWhile { it.isEmpty() }.dropLastWhile { it.isEmpty() }
+    }
 
     private fun parseInline(s: String): List<MdInline> {
         val out = mutableListOf<MdInline>()
