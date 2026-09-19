@@ -224,5 +224,7 @@ private fun mergeData(current: AppData, incoming: AppData): AppData {
         } else {
             incoming.health
         },
+        // 皮肤是本机外观偏好，导入备份不覆盖当前皮肤
+        skinId = current.skinId,
     )
 }

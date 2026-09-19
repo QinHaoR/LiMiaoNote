@@ -91,6 +91,9 @@ data class AppData(
     val meals: List<MealEntry>,
     val waterLogs: List<WaterLog>,
     val health: HealthProfile,
+    // ===== 外观 =====
+    /** 当前皮肤 id（见 `ui/theme/Skins.kt`）。找不到对应皮肤时自动回落到默认皮肤。 */
+    val skinId: String,
 ) {
     companion object {
         fun empty() = AppData(
@@ -107,11 +110,22 @@ data class AppData(
             meals = emptyList(),
             waterLogs = emptyList(),
             health = HealthProfile.DEFAULT,
+            skinId = Prefs.DEFAULT_SKIN_ID,
         )
     }
 }
 
 // ==================== 常量 ====================
+
+/**
+ * 应用级偏好常量。
+ *
+ * 注意：`DEFAULT_SKIN_ID` 的值必须与 `ui/theme/skins/` 下皮肤定义里的 `id` 一致。
+ * 放在 data 层是为了避免 data 包反向依赖 ui 包。
+ */
+object Prefs {
+    const val DEFAULT_SKIN_ID = "paper"
+}
 
 object Categories {
     val EXPENSE = listOf("餐饮", "出行", "购物", "居住", "娱乐", "医疗", "学习", "其他")
@@ -262,6 +276,8 @@ fun parseAppData(json: String): AppData {
             waterLogs = arr("waterLogs").asList { it.parseWaterLog() },
             health = o.optJSONObject("health")?.let { it.parseHealthProfile() }
                 ?: HealthProfile.DEFAULT,
+            // 老数据没有 skinId → 用默认皮肤兜底，天然向后兼容
+            skinId = o.optString("skinId", Prefs.DEFAULT_SKIN_ID),
             settings = o.optJSONObject("settings")?.let { settings(it) }
                 ?: CycleSettings(28, 5),
         )

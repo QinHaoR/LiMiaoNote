@@ -3,7 +3,7 @@ package com.limiao.notes.ui
 import java.util.Calendar
 
 /** 应用版本（改版本号时：这里 + app/build.gradle.kts 的 versionName 一起改） */
-internal const val APP_VERSION = "v0.3"
+internal const val APP_VERSION = "v0.4"
 
 /** 当前月 "YYYY-MM" */
 internal fun currentYm(): String {
@@ -24,3 +24,7 @@ internal fun shiftMonth(ym: String, delta: Int): String {
     val mm = (c.get(Calendar.MONTH) + 1).toString().padStart(2, '0')
     return "${c.get(Calendar.YEAR)}-$mm"
 }
+
+/** 数字输入过滤：只允许数字和小数点，且长度受限（克数/热量/金额输入框共用） */
+internal fun numFilter(s: String): String =
+    if (s.length <= 7 && s.all { it.isDigit() || it == '.' }) s else s.dropLast(1)

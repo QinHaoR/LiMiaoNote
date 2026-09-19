@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 启动画面：浅粉底 + 居中图标 -->
+<!-- 启动画面：极浅灰底 + 居中图标（底色同默认皮肤） -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@color/ic_launcher_background" />
+    <item android:drawable="@color/splash_bg" />
     <item
         android:width="88dp"
         android:height="88dp"

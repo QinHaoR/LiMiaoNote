@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#E8737F</color>
+    <!-- 启动页底色。必须与默认皮肤（ui/theme/skins/PaperSkin.kt）的 bg 保持一致：
+         windowBackground 发生在 Compose 起来之前，没法读 CompositionLocal，只能静态写死。 -->
+    <color name="splash_bg">#F4F4F6</color>
 </resources>

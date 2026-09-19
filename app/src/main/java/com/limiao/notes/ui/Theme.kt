@@ -1,37 +1,78 @@
 package com.limiao.notes.ui
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import com.limiao.notes.ui.theme.LocalAppSkin
+import com.limiao.notes.ui.theme.Skins
+import com.limiao.notes.ui.theme.toColorScheme
 
-// ==================== 配色（对应 Web 版设计规范） ====================
+// ==================== 配色令牌（全部跟随皮肤） ====================
+//
+// 下面全是「读 CompositionLocal 的 Composable getter」，不是写死的颜色常量。
+// 好处：换肤时全站自动生效，页面代码一个字都不用改，用法跟以前完全一样 —— 直接写 `Primary` / `Ink` / `Line`。
+//
+// ⚠️ 因为是 Composable getter，**只能**在 @Composable 作用域里读（函数体、Modifier 链、
+//    @Composable 函数的默认参数值都可以）。**不能**写在顶层 val、object 初始化器、
+//    非 Composable 的普通函数里 —— 那样编译不过。
 
-val Primary = Color(0xFFE8737F)      // 主色（粉）
-val Bg = Color(0xFFFDF5F6)           // 页面背景（浅粉）
-val Surface = Color(0xFFFFFFFF)      // 卡片背景
-val Ink = Color(0xFF333333)          // 主文字
-val InkSoft = Color(0xFF555555)      // 次要文字
-val Muted = Color(0xFF999999)        // 弱文字
-val Line = Color(0xFFEEEEEE)         // 分隔线 / 描边
-val IncomeGreen = Color(0xFF4CAF50)  // 收入绿
+// —— 兼容令牌：名字与旧版一致，老页面无需改动 ——
+val Primary: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.accent
+val Bg: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.bg
+val Surface: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.card
+val Ink: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.textPrimary
+val InkSoft: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.textSecondary
+val Muted: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.textTertiary
+val Line: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.divider
+val IncomeGreen: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.success
 
-private val LightColors = lightColorScheme(
-    primary = Primary,
-    onPrimary = Color.White,
-    background = Bg,
-    onBackground = Ink,
-    surface = Surface,
-    onSurface = Ink,
-    surfaceVariant = Line,
-    onSurfaceVariant = InkSoft,
-    outline = Line,
-    outlineVariant = Line,
-)
+// —— 新语义令牌：新代码优先用这些，名字更贴近用途 ——
+val Accent: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.accent
+val AccentPressed: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.accentPressed
+val AccentSoft: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.accentSoft
+val OnAccent: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.onAccent
 
+val CardBg: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.card
+val CardBorder: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.cardBorder
+val Divider: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.divider
+val DarkBanner: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.darkBanner
+
+val TextPrimary: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.textPrimary
+val TextSecondary: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.textSecondary
+val TextTertiary: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.textTertiary
+
+val Success: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.success
+val SuccessSoft: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.successSoft
+val Danger: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.danger
+val DangerSoft: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.dangerSoft
+val Warning: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.warning
+val WarningSoft: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.warningSoft
+val Water: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.water
+val WaterSoft: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.waterSoft
+
+val ChartLine: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.chartLine
+val ChartFill: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.chartFill
+val ChartGrid: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.chartGrid
+
+val NavBar: Color @Composable @ReadOnlyComposable get() = LocalAppSkin.current.navBar
+
+/**
+ * 全站主题入口。
+ *
+ * [skinId] 来自 `AppData.skinId`（存在 DataStore 里），所以换肤能持久化、重启后仍然生效。
+ * 找不到对应皮肤时自动回落到默认皮肤，不会崩。
+ */
 @Composable
-fun LiMiaoTheme(content: @Composable () -> Unit) {
-    // 本应用固定浅色主题（与产品设计一致）
-    MaterialTheme(colorScheme = LightColors, content = content)
+fun LiMiaoTheme(
+    skinId: String = Skins.DEFAULT.id,
+    content: @Composable () -> Unit,
+) {
+    val skin = remember(skinId) { Skins.byId(skinId) }
+    // 本应用固定浅色（皮肤机制天然支持深色，将来再加一套深色皮肤即可）
+    CompositionLocalProvider(LocalAppSkin provides skin) {
+        MaterialTheme(colorScheme = skin.toColorScheme(), content = content)
+    }
 }

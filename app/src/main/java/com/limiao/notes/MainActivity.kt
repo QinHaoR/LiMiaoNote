@@ -39,6 +39,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,9 +47,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -59,6 +62,8 @@ import androidx.navigation.navArgument
 import com.limiao.notes.data.AppData
 import com.limiao.notes.data.AppRepository
 import com.limiao.notes.data.MdHistory
+import com.limiao.notes.ui.Accent
+import com.limiao.notes.ui.AccentSoft
 import com.limiao.notes.ui.Bg
 import com.limiao.notes.ui.HomeScreen
 import com.limiao.notes.ui.InkSoft
@@ -69,13 +74,18 @@ import com.limiao.notes.ui.MdReaderScreen
 import com.limiao.notes.ui.MonthDetailScreen
 import com.limiao.notes.ui.MonthsScreen
 import com.limiao.notes.ui.Muted
+import com.limiao.notes.ui.NavBar
 import com.limiao.notes.ui.NotesScreen
 import com.limiao.notes.ui.PeriodScreen
 import com.limiao.notes.ui.ProfileScreen
 import com.limiao.notes.ui.SettingsScreen
+import com.limiao.notes.ui.TextTertiary
 import com.limiao.notes.ui.currentYm
+import com.limiao.notes.ui.theme.AppSkin
+import com.limiao.notes.ui.theme.Skins
+import com.limiao.notes.ui.components.EmptyState
+import com.limiao.notes.ui.components.LTitleTopBar
 import com.limiao.notes.ui.health.HealthHomeScreen
-import com.limiao.notes.ui.health.HealthPlaceholder
 import com.limiao.notes.ui.health.HealthProfileScreen
 import com.limiao.notes.ui.health.MealScreen
 import com.limiao.notes.ui.health.WeightScreen
@@ -94,20 +104,44 @@ class MainActivity : ComponentActivity() {
         repository = AppRepository(applicationContext)
         // 冷启动时直接收到"打开 .md"（VIEW），解析并打开
         if (intent?.action == Intent.ACTION_VIEW) intent.data?.let { openUri(it) }
+        // 先用默认皮肤设置系统栏，避免启动瞬间闪一下系统默认色。
+        // 数据读盘完成后，下面的 LaunchedEffect 会按真正存的皮肤再校正一次。
+        applySystemBars(Skins.DEFAULT)
         setContent {
-            LiMiaoTheme {
+            // data 提升到这里：主题需要它来决定用哪套皮肤
+            val data by repository.data.collectAsState(initial = AppData.empty())
+            LiMiaoTheme(skinId = data.skinId) {
+                LaunchedEffect(data.skinId) { applySystemBars(Skins.byId(data.skinId)) }
                 val reading = mdOpen
                 if (reading != null) {
                     // 外部打开 / 从 Markdown 首页打开 → 全屏阅读器
                     MdReaderScreen(reading, onClose = { mdOpen = null })
                 } else {
                     AppRoot(
+                        data = data,
                         repository = repository,
                         onOpenMdUri = { uri -> openUri(uri) },
                         onRemoveMdHistory = { h -> removeMdHistory(h) },
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * 让状态栏 / 导航栏跟随皮肤。
+     *
+     * 注：targetSdk 35+ 起 `statusBarColor` 在 Android 15+ 上已被系统忽略（强制 edge-to-edge），
+     * 那里的状态栏颜色由页面自身的底色透过呈现 —— 页面底色同样跟随皮肤，观感一致。
+     * 这里保留赋值是为了照顾 Android 14 及以下，同时统一设置状态栏图标的明暗。
+     */
+    @Suppress("DEPRECATION")
+    private fun applySystemBars(skin: AppSkin) {
+        window.statusBarColor = skin.statusBar.toArgb()
+        window.navigationBarColor = skin.navBar.toArgb()
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = skin.lightStatusBarIcons
+            isAppearanceLightNavigationBars = skin.lightStatusBarIcons
         }
     }
 
@@ -181,11 +215,11 @@ private data class DrawerApp(
 
 @Composable
 private fun AppRoot(
+    data: AppData,
     repository: AppRepository,
     onOpenMdUri: (Uri) -> Unit,
     onRemoveMdHistory: (MdHistory) -> Unit,
 ) {
-    val data by repository.data.collectAsState(initial = AppData.empty())
     val scope = rememberCoroutineScope()
     val navController = rememberNavController()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -339,17 +373,17 @@ private fun AppRoot(
                     )
                 }
                 composable("health_report") {
-                    HealthPlaceholder(
-                        icon = Icons.Filled.Description,
+                    PlaceholderPage(
                         title = "报告",
+                        icon = Icons.Filled.Description,
                         desc = "周报 / 月报、体重变化与摄入分析正在做\n后续这里还会加上 AI 趋势解读",
                         onBack = { navController.popBackStack() },
                     )
                 }
                 composable("health_ai") {
-                    HealthPlaceholder(
-                        icon = Icons.AutoMirrored.Filled.Chat,
+                    PlaceholderPage(
                         title = "AI 助手",
+                        icon = Icons.AutoMirrored.Filled.Chat,
                         desc = "接入 DeepSeek 后的对话式记录与分析\n暂时还没接，先留好入口",
                         onBack = { navController.popBackStack() },
                     )
@@ -416,4 +450,18 @@ private fun DrawerItem(
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp),
     )
+}
+
+/** 未开放页面的占位（⑤ 报告 / ⑥ AI 助手）—— 居中标题顶栏 + 空状态 */
+@Composable
+private fun PlaceholderPage(
+    title: String,
+    icon: ImageVector,
+    desc: String,
+    onBack: () -> Unit,
+) {
+    Column(Modifier.fillMaxSize()) {
+        LTitleTopBar(title, onBack)
+        EmptyState(icon = icon, title = title, desc = desc)
+    }
 }

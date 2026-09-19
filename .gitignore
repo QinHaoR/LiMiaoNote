@@ -14,3 +14,6 @@ captures/
 # 系统
 .DS_Store
 Thumbs.db
+
+# 视觉重构前的源码备份（不入库）
+_backup_v03/

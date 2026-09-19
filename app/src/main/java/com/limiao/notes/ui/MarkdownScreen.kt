@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,7 +56,6 @@ data class MdOpen(val uriString: String, val name: String)
 
 private val CodeBg = Color(0xFFF4F4F5)
 private val CodeInlineBg = Color(0xFFEDEEF0)
-private val QuoteBg = Primary.copy(alpha = 0.05f)
 
 @Composable
 fun MdReaderScreen(open: MdOpen, onClose: () -> Unit) {
@@ -193,7 +193,7 @@ private fun MdBlockView(b: MdBlock) {
                 Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
-                    .background(QuoteBg, RoundedCornerShape(4.dp))
+                    .background(Primary.copy(alpha = 0.05f), RoundedCornerShape(4.dp))
                     .height(IntrinsicSize.Min),
             ) {
                 Box(
@@ -274,9 +274,20 @@ private fun TableView(t: MdBlock.Table) {
     }
 }
 
-/** 行内标记 → AnnotatedString（粗体/斜体/删除线/行内代码/链接） */
-private fun inlineAnnotated(list: List<MdInline>): AnnotatedString = buildAnnotatedString {
-    appendInline(list, bold = false, italic = false, strike = false)
+/**
+ * 行内标记 → AnnotatedString（粗体/斜体/删除线/行内代码/链接）。
+ *
+ * 标 @Composable 是因为要读颜色令牌（令牌是 Composable getter，皮肤才能生效）；
+ * 函数体只读 CompositionLocal + 纯计算，不产生任何节点，所以可以再标 @ReadOnlyComposable。
+ */
+@Composable
+@ReadOnlyComposable
+private fun inlineAnnotated(list: List<MdInline>): AnnotatedString {
+    val codeFg = Ink
+    val linkColor = Primary
+    return buildAnnotatedString {
+        appendInline(list, bold = false, italic = false, strike = false, codeFg = codeFg, linkColor = linkColor)
+    }
 }
 
 private fun AnnotatedString.Builder.appendInline(
@@ -284,6 +295,8 @@ private fun AnnotatedString.Builder.appendInline(
     bold: Boolean,
     italic: Boolean,
     strike: Boolean,
+    codeFg: Color,
+    linkColor: Color,
 ) {
     items.forEach { sp ->
         when (sp) {
@@ -300,17 +313,17 @@ private fun AnnotatedString.Builder.appendInline(
             }
             is MdInline.Bold -> {
                 pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
-                appendInline(sp.children, false, italic, strike)
+                appendInline(sp.children, false, italic, strike, codeFg, linkColor)
                 pop()
             }
             is MdInline.Italic -> {
                 pushStyle(SpanStyle(fontStyle = FontStyle.Italic))
-                appendInline(sp.children, bold, false, strike)
+                appendInline(sp.children, bold, false, strike, codeFg, linkColor)
                 pop()
             }
             is MdInline.Strike -> {
                 pushStyle(SpanStyle(textDecoration = TextDecoration.LineThrough))
-                appendInline(sp.children, bold, italic, false)
+                appendInline(sp.children, bold, italic, false, codeFg, linkColor)
                 pop()
             }
             is MdInline.Code -> {
@@ -319,14 +332,14 @@ private fun AnnotatedString.Builder.appendInline(
                         fontFamily = FontFamily.Monospace,
                         fontSize = 13.sp,
                         background = CodeInlineBg,
-                        color = Ink,
+                        color = codeFg,
                     )
                 )
                 append(sp.s)
                 pop()
             }
             is MdInline.Link -> {
-                pushStyle(SpanStyle(color = Primary, textDecoration = TextDecoration.Underline))
+                pushStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline))
                 append(sp.text)
                 pop()
             }
