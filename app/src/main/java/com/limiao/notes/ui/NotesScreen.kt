@@ -26,7 +26,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
+import com.limiao.notes.ui.components.rememberSheetStateExpanded
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -127,7 +127,7 @@ fun NotesScreen(data: AppData, onSave: (AppData) -> Unit) {
         var tag by remember { mutableStateOf(target?.tag ?: "便签") }
         ModalBottomSheet(
             onDismissRequest = { showSheet = false; editNote = null },
-            sheetState = rememberModalBottomSheetState(),
+            sheetState = rememberSheetStateExpanded(),
         ) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                 Text(

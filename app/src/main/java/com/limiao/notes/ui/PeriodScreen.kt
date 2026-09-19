@@ -34,7 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import com.limiao.notes.ui.components.rememberSheetStateExpanded
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -330,7 +330,7 @@ fun PeriodScreen(data: AppData, onSave: (AppData) -> Unit) {
         var symptoms by remember { mutableStateOf<List<String>>(dayNote?.symptoms ?: emptyList()) }
         var noteText by remember { mutableStateOf(dayNote?.note ?: "") }
 
-        val sheetState = rememberModalBottomSheetState()
+        val sheetState = rememberSheetStateExpanded()
         val scope = rememberCoroutineScope()
         val context = LocalContext.current
 
