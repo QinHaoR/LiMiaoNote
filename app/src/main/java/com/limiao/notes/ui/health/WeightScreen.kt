@@ -13,14 +13,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,9 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -44,20 +38,36 @@ import com.limiao.notes.data.HealthData
 import com.limiao.notes.data.WeightRecord
 import com.limiao.notes.data.fmt1
 import com.limiao.notes.data.prettyDate
-import com.limiao.notes.ui.Bg
-import com.limiao.notes.ui.IncomeGreen
-import com.limiao.notes.ui.Ink
-import com.limiao.notes.ui.InkSoft
-import com.limiao.notes.ui.Line
-import com.limiao.notes.ui.Muted
-import com.limiao.notes.ui.Primary
+import com.limiao.notes.ui.CardBg
+import com.limiao.notes.ui.ChartFill
+import com.limiao.notes.ui.ChartGrid
+import com.limiao.notes.ui.ChartLine
+import com.limiao.notes.ui.Success
+import com.limiao.notes.ui.TextPrimary
+import com.limiao.notes.ui.TextSecondary
+import com.limiao.notes.ui.TextTertiary
+import com.limiao.notes.ui.components.BigNumber
+import com.limiao.notes.ui.components.InputNumberDialog
+import com.limiao.notes.ui.components.LTitleTopBar
+import com.limiao.notes.ui.components.PillButton
+import com.limiao.notes.ui.components.SectionLabel
+import com.limiao.notes.ui.components.SegRow
+import com.limiao.notes.ui.components.SheetActionRow
+import com.limiao.notes.ui.components.SheetDivider
+import com.limiao.notes.ui.components.SheetShell
+import com.limiao.notes.ui.components.SkinCard
+import com.limiao.notes.ui.components.ThinDivider
+import com.limiao.notes.ui.components.rememberSheetStateExpanded
+import com.limiao.notes.ui.theme.Dim
+import com.limiao.notes.ui.theme.Typ
 
-private val RANGES = listOf(7 to "近 7 天", 30 to "近 30 天", 90 to "近 90 天")
+private val RANGE_DAYS = listOf(7, 30, 90)
+private val RANGE_LABELS = listOf("近 7 天", "近 30 天", "近 90 天")
 
 /**
  * ② 体重
  *
- * 曲线是 Canvas 手绘的（零第三方图表库），只有一条折线 + 数据点 + 目标虚线。
+ * 曲线是 Canvas 手绘的（零第三方图表库）：网格 + 面积填充 + 折线 + 数据点 + 目标虚线。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,11 +77,12 @@ fun WeightScreen(
     onBack: () -> Unit,
 ) {
     val today = DateFmt.today()
-    var rangeDays by remember { mutableStateOf(30) }
+    var rangeIndex by remember { mutableStateOf(1) }
     var editing by remember { mutableStateOf<WeightRecord?>(null) }
     var adding by remember { mutableStateOf(false) }
     var actionFor by remember { mutableStateOf<WeightRecord?>(null) }
 
+    val rangeDays = RANGE_DAYS[rangeIndex]
     val cur = HealthData.currentWeight(data)
     val lost = HealthData.lostWeight(data)
     val target = data.health.targetWeight
@@ -90,65 +101,54 @@ fun WeightScreen(
             .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp),
     ) {
-        HealthTopBar("体重", onBack)
+        LTitleTopBar("体重", onBack)
 
-        Column(Modifier.padding(horizontal = 16.dp)) {
+        Column(Modifier.padding(horizontal = Dim.screen)) {
             // ===== 当前体重 =====
-            HCard {
+            SkinCard {
                 Row(verticalAlignment = Alignment.Bottom) {
                     Column(Modifier.weight(1f)) {
-                        Text("当前体重", fontSize = 12.sp, color = Muted)
-                        Spacer(Modifier.height(6.dp))
-                        HNumber(if (cur > 0) fmt1(cur) else "—", 38, unit = "kg")
+                        SectionLabel("当前体重")
+                        Spacer(Modifier.height(8.dp))
+                        BigNumber(if (cur > 0) fmt1(cur) else "—", unit = "kg", style = Typ.hero)
                     }
                     if (lost != 0.0) {
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("已减重", fontSize = 12.sp, color = Muted)
-                            Spacer(Modifier.height(4.dp))
                             Text(
-                                "${fmt1(lost)} kg",
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = if (lost > 0) IncomeGreen else Ink,
+                                if (lost > 0) "已减重" else "已回升",
+                                fontSize = 12.sp, color = TextTertiary,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            BigNumber(
+                                fmt1(Math.abs(lost)),
+                                unit = "kg",
+                                style = Typ.mid,
+                                color = if (lost > 0) Success else TextPrimary,
                             )
                         }
                     }
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Dim.gapSection))
 
             // ===== 曲线 =====
-            HCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    HLabel("体重曲线")
-                    Spacer(Modifier.weight(1f))
-                    RANGES.forEach { (d, label) ->
-                        val sel = d == rangeDays
-                        Box(
-                            Modifier
-                                .padding(start = 6.dp)
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(if (sel) Primary else Bg)
-                                .clickable { rangeDays = d }
-                                .padding(horizontal = 10.dp, vertical = 5.dp),
-                        ) {
-                            Text(
-                                label,
-                                fontSize = 11.sp,
-                                color = if (sel) Color.White else InkSoft,
-                            )
-                        }
-                    }
-                }
+            SkinCard {
+                SectionLabel("体重曲线")
                 Spacer(Modifier.height(12.dp))
+                SegRow(
+                    options = RANGE_LABELS,
+                    selectedIndex = rangeIndex,
+                    onSelect = { rangeIndex = it },
+                )
+                Spacer(Modifier.height(14.dp))
 
                 if (shown.isEmpty()) {
                     Box(
                         Modifier.fillMaxWidth().height(150.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("这段时间还没有体重记录", fontSize = 13.sp, color = Muted)
+                        Text("这段时间还没有体重记录", fontSize = 13.sp, color = TextTertiary)
                     }
                 } else {
                     WeightChart(
@@ -156,70 +156,62 @@ fun WeightScreen(
                         target = target,
                         modifier = Modifier.fillMaxWidth().height(150.dp),
                     )
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(12.dp))
                     Row(Modifier.fillMaxWidth()) {
                         ChartStat("最高", fmt1(shown.maxOf { it.weight }) + " kg")
                         ChartStat("最低", fmt1(shown.minOf { it.weight }) + " kg")
                         ChartStat("记录", "${shown.size} 次")
                     }
                     if (target > 0) {
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(8.dp))
                         Text(
-                            "粉色虚线 = 目标体重 ${fmt1(target)} kg",
-                            fontSize = 11.sp, color = Muted,
+                            "橙色虚线 = 目标体重 ${fmt1(target)} kg",
+                            fontSize = 11.sp, color = TextTertiary,
                         )
                     }
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Dim.gapSection))
 
             // ===== 记录按钮 =====
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Primary)
-                    .clickable { adding = true }
-                    .padding(vertical = 13.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    if (history.any { it.date == today }) "修改今日体重" else "记录今日体重",
-                    color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium,
-                )
-            }
+            PillButton(
+                text = if (history.any { it.date == today }) "修改今日体重" else "记录今日体重",
+                onClick = { adding = true },
+            )
 
             // ===== 历史 =====
             if (history.isNotEmpty()) {
-                Spacer(Modifier.height(16.dp))
-                HLabel("历史记录")
-                Spacer(Modifier.height(8.dp))
-                HCard(padding = 0.dp) {
+                Spacer(Modifier.height(20.dp))
+                SectionLabel("历史记录")
+                Spacer(Modifier.height(10.dp))
+                SkinCard(padding = 0.dp) {
                     history.take(60).forEachIndexed { i, r ->
-                        if (i > 0) HorizontalDivider(color = Line, modifier = Modifier.padding(start = 16.dp))
+                        if (i > 0) {
+                            ThinDivider(Modifier.padding(start = Dim.cardPad, end = Dim.cardPad))
+                        }
                         Row(
                             Modifier
                                 .fillMaxWidth()
                                 .clickable { actionFor = r }
-                                .padding(horizontal = 16.dp, vertical = 13.dp),
+                                .padding(horizontal = Dim.cardPad, vertical = 13.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
                                 prettyDate(r.date),
-                                fontSize = 13.sp, color = InkSoft,
+                                fontSize = 13.sp, color = TextSecondary,
                                 modifier = Modifier.weight(1f),
                             )
                             Text(
                                 "${fmt1(r.weight)} kg",
-                                fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Ink,
+                                fontSize = 15.sp, fontWeight = FontWeight.Medium, color = TextPrimary,
                             )
                         }
                     }
                 }
                 if (history.size > 60) {
                     Spacer(Modifier.height(6.dp))
-                    Text("只显示最近 60 条", fontSize = 11.sp, color = Muted)
+                    Text("只显示最近 60 条", fontSize = 11.sp, color = TextTertiary)
                 }
             }
         }
@@ -244,34 +236,26 @@ fun WeightScreen(
     actionFor?.let { rec ->
         ModalBottomSheet(
             onDismissRequest = { actionFor = null },
-            sheetState = rememberModalBottomSheetState(),
+            sheetState = rememberSheetStateExpanded(),
+            containerColor = CardBg,
+            dragHandle = null,
         ) {
-            Text(
-                prettyDate(rec.date) + "　" + fmt1(rec.weight) + " kg",
-                fontSize = 13.sp, color = Muted,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-            )
-            ListItem(
-                headlineContent = { Text("修改这条记录") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        editing = rec
-                        actionFor = null
-                    },
-            )
-            ListItem(
-                headlineContent = {
-                    Text("删除这条记录", color = Color(0xFFDC2626))
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        onSave(HealthData.removeWeight(data, rec.date))
-                        actionFor = null
-                    },
-            )
-            Spacer(Modifier.height(24.dp))
+            SheetShell(
+                title = "${prettyDate(rec.date)}　${fmt1(rec.weight)} kg",
+                onClose = { actionFor = null },
+            ) {
+                SheetDivider()
+                SheetActionRow("修改这条记录") {
+                    editing = rec
+                    actionFor = null
+                }
+                SheetDivider()
+                SheetActionRow("删除这条记录", danger = true) {
+                    onSave(HealthData.removeWeight(data, rec.date))
+                    actionFor = null
+                }
+                Spacer(Modifier.height(12.dp))
+            }
         }
     }
 }
@@ -279,14 +263,15 @@ fun WeightScreen(
 @Composable
 private fun RowScope.ChartStat(label: String, value: String) {
     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
-        Text(label, fontSize = 11.sp, color = Muted)
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
+        Spacer(Modifier.height(2.dp))
+        Text(label, fontSize = 11.sp, color = TextTertiary)
     }
 }
 
 /**
  * 体重折线图 —— Canvas 手绘。
- * 只有三样东西：三条浅色网格线、一条折线 + 数据点、一条目标虚线。
+ * 由下到上：三条网格线 → 面积填充 → 折线 + 数据点 → 目标虚线。
  */
 @Composable
 private fun WeightChart(
@@ -295,8 +280,11 @@ private fun WeightChart(
     modifier: Modifier = Modifier,
 ) {
     if (records.isEmpty()) return
-    val line = Primary
-    val grid = Line
+    // 这几个颜色必须在 Composable 作用域先读出来，Canvas 的 DrawScope 里不能读令牌
+    val line = ChartLine
+    val grid = ChartGrid
+    val fill = ChartFill
+    val dotRing = CardBg
 
     val minW = records.minOf { it.weight }
     val maxW = records.maxOf { it.weight }
@@ -320,13 +308,22 @@ private fun WeightChart(
 
         fun py(v: Double): Float = ((hi - v) / span * h).toFloat()
 
+        // 面积填充（把折线下方补上淡淡的色，曲线才有"体量")
+        val area = Path().apply {
+            moveTo(px(0), h)
+            records.forEachIndexed { i, r -> lineTo(px(i), py(r.weight)) }
+            lineTo(px(records.size - 1), h)
+            close()
+        }
+        drawPath(area, fill)
+
         // 目标体重虚线
         if (target > 0 && target in lo..hi) {
             val ty = py(target)
             var x = 0f
             while (x < w) {
                 drawLine(
-                    line.copy(alpha = 0.4f),
+                    line.copy(alpha = 0.45f),
                     Offset(x, ty),
                     Offset((x + 9f).coerceAtMost(w), ty),
                     strokeWidth = 3f,
@@ -348,7 +345,7 @@ private fun WeightChart(
 
         records.forEachIndexed { i, r ->
             val c = Offset(px(i), py(r.weight))
-            drawCircle(Color.White, radius = 8f, center = c)
+            drawCircle(dotRing, radius = 8f, center = c)
             drawCircle(line, radius = 5f, center = c)
         }
     }
